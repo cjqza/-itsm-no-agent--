@@ -2,6 +2,13 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-23] 认证改造前端三项：用户注册入口、账号审批页、admin_access 规则提示（任务 C）
+- **变更**：前端三项打包交付。(1) C-1 用户端登录页底部增加「申请注册」入口，点击弹出注册对话框（姓名/电话/密码/确认密码，含前后端校验），authApi 新增 register 方法。(2) C-2 admin 前端新建 AccountRequests.vue 页面，展示待审批申请列表，支持批准（批准后显示分配的 login_id）与拒绝操作，adminApi 新增 getAccountRequests/reviewAccountRequest，路由与侧边栏菜单同步注册。(3) C-3 Permissions.vue 中 admin_access 权限开关对非 super_admin 用户禁用并附 tooltip 提示；403 拦截器改为展示后端 detail 错误信息；updatePermission 正确透传 admin_access 参数。
+- **原因**：任务 A 完成后端密码认证与账号审批接口，任务 B 完成登录页适配，任务 C 补齐前端交互层：用户注册入口、管理员审批页面、admin_access 权限规则的前端约束与提示。
+- **影响**：frontend-client/src/views/Login.vue（注册对话框）、frontend-client/src/api/index.js（register 方法）；frontend/src/views/admin/AccountRequests.vue（新建审批页）、frontend/src/views/admin/Permissions.vue（admin_access 禁用+tooltip）、frontend/src/views/admin/Layout.vue（菜单项）、frontend/src/router/index.js（路由）、frontend/src/api/index.js（403 detail + 审批 API）。纯前端改造，后端无变更。
+- **提交**：`d029a22`
+- **测试**：后端 `cd backend && python tests/test_api.py` 67/67 全部通过，无回归。
+
 ## [2026-07-23] 认证改造：四端前端登录页适配新接口（任务 B）
 - **变更**：四个前端 Login.vue（client/agent/ops/admin）统一去掉 el-tabs（飞书ID/用户名双 tab）与 quickLogin 测试账号快捷标签，改为「账号（login_id 或手机号）+ 密码」双输入框，调用 `store.login({ account, password })` 对齐后端 `POST /api/auth/login` 新契约；登录失败显示后端 detail 错误信息。admin 前端 api/index.js 移除 feishu_user_id 特判逻辑，store/user.js 移除字符串转 feishu_user_id 逻辑、fetchMe 补存 login_id/phone。
 - **原因**：后端认证体系已从 feishu_user_id 改为 login_id/手机号+密码（任务 A），前端需同步适配新接口契约。
