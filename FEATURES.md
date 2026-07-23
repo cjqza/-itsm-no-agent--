@@ -273,10 +273,14 @@
 
 ### 6.4 其他
 - [x] API 限流（登录 10/min，其他 120/min）
-- [x] 文件上传（图片/文档/文本/压缩包，10MB）
+- [x] 文件上传（图片/文档/文本/压缩包，10MB，已移除 text/html/js/css 危险类型）
 - [x] 快捷回复模板
 - [x] 工单操作日志
 - [x] 404 兜底路由
+- [x] 数据库性能索引（tickets/ticket_logs/chat_messages/chat_message_reads 高频查询字段）
+- [x] 聊天室列表批量查询优化（get_my_rooms 从 1+3N → 4 次批量查询）
+- [x] Dashboard 统计合并查询（5 次独立 SELECT → 1 条 CASE SQL）
+- [x] 前端空 catch 块统一补错误提示（11 处）
 
 ---
 

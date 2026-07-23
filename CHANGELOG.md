@@ -2,6 +2,13 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-23] 集中代码优化：数据库索引、N+1 查询修复、Dashboard 合并、上传安全、前端代码质量（7 项）
+- **变更**：七项集中优化打包交付。(1) 数据库索引：Ticket 的 status/created_at/assignee_id/creator_id/category_id 加 index=True，TicketLog 加 ticket_id 索引，ChatMessage 加 room_id 索引，ChatMessageRead 加 message_id/user_id 索引，共 9 个索引通过 alembic 迁移 `f7a8b9c0d1e2` 创建。(2) N+1 查询修复：`get_my_rooms` 从 1+3N 次查询优化为 4 次批量查询（rooms→last_messages→unread_counts→tickets 一次取回）。(3) Dashboard 查询合并：`/api/itsm/dashboard` 从 5 次独立 SELECT 合并为 1 条 CASE SQL，减少数据库往返。(4) 上传安全：移除 text/html、text/javascript、text/css 三种危险 MIME 类型白名单。(5) 前端空 catch 补错误提示：TicketDetail.vue 6 处、Dashboard.vue 2 处、Layout.vue/Categories.vue/Permissions.vue 各 1 处，共 11 处空 catch 块补 ElMessage.error。(6) 死代码清理：Home.vue 删除未使用 openInNewTab 函数及 onMounted import，AgentChat.vue 移除未使用 watch import，NoPermission.vue 移除未使用 `import api from '@/api'`。(7) frontend-ops main.js 补 zhCn locale 导入对齐其他三端。
+- **原因**：高频查询字段缺少索引导致大数据量下查询变慢；get_my_rooms 存在经典 N+1 问题；dashboard 多次独立查询可合并减少开销；上传白名单含 HTML/JS/CSS 存在 XSS 风险；前端空 catch 静默吞异常不利于排查；存在未使用的导入和函数属于死代码。
+- **影响**：`backend/app/models/ticket.py`（Ticket/TicketLog 索引）；`backend/app/models/chat.py`（ChatMessage/ChatMessageRead 索引）；`backend/alembic/versions/f7a8b9c0d1e2_add_performance_indexes.py`（迁移文件）；`backend/app/api/chat.py`（get_my_rooms 批量查询重写）；`backend/app/api/itsm.py`（dashboard CASE SQL 合并）；`backend/app/api/upload.py`（移除危险 MIME）；`frontend-agent/src/views/TicketDetail.vue`（6 处空 catch）；`frontend-agent/src/views/Dashboard.vue`（2 处空 catch）；`frontend-agent/src/views/Layout.vue`（1 处空 catch）；`frontend/src/views/admin/Categories.vue`（1 处空 catch）；`frontend/src/views/admin/Permissions.vue`（1 处空 catch）；`frontend-client/src/views/Home.vue`（删除死代码）；`frontend-agent/src/views/AgentChat.vue`（删除死代码）；`frontend/src/views/auth/NoPermission.vue`（删除死代码）；`frontend-ops/src/main.js`（补 zhCn locale）。前后端均有改动，涉及数据库索引迁移。
+- **提交**：`58ba73f`
+- **测试**：`cd backend && python tests/test_api.py` 67/67 全部通过，无回归。
+
 ## [2026-07-23] P1 安全余项：全局异常日志、删除 DEBUG print、401 清理一致性、输入校验（v2 优化 #6/#7/#9/#10）
 - **变更**：(1) #6 全局异常与日志：`main.py` 500 响应体改为通用文案不再泄露内部错误信息，日志增加 `RotatingFileHandler` 落盘 `backend/logs/app.log`（10MB 轮转 5 份），`print` 改用 `logger.error`。(2) #7 删除 DEBUG print：确认 `auth.py` 中已无遗留 `print`，无需改动。(3) #9 401 清理一致性：四端前端 `api/index.js` 的 401 拦截器统一清理 `token`、`user`、`permissions`（admin 前端原先只清 token 和 user，现已补齐 permissions）。(4) #10 输入校验：`chat.py` MessageType 转换增加 try/except 防御非法 `msg_type` 返回 400；`templates.py` TemplateCreate/Update 的 `title` 和 `content` 增加 `max_length` 约束；`schemas/ticket.py` TicketRate.rating 增加 `ge=1/le=5`、TicketCreate.title 增加 `max_length=200`、description 增加 `max_length=5000`。
 - **原因**：v2 优化方案 P0 已完成，P1 安全余项需补齐：生产环境 500 不应泄露内部错误；日志应落盘便于排查；前端 401 清理不一致会导致权限缓存残留；关键输入缺少长度/范围校验存在越界风险。
