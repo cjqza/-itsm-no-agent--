@@ -266,7 +266,7 @@ async function deleteItem(type, id) {
     properties: adminApi.deleteProperty, symptoms: adminApi.deleteSymptom,
     causes: adminApi.deleteCause, solutions: adminApi.deleteSolution,
   }
-  try { await apiMap[type](id); ElMessage.success('删除成功'); await loadAll() } catch (e) {}
+  try { await apiMap[type](id); ElMessage.success('删除成功'); await loadAll() } catch (e) { ElMessage.error('删除失败') }
 }
 </script>
 

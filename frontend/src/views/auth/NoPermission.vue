@@ -32,7 +32,6 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import api from '@/api'
 import { adminApi } from '@/api'
 
 const router = useRouter()

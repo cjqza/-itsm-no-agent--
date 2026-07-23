@@ -38,7 +38,7 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    room_id = Column(Integer, ForeignKey("chat_rooms.id"), nullable=False)
+    room_id = Column(Integer, ForeignKey("chat_rooms.id"), nullable=False, index=True)
     sender_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # None=系统消息
     content = Column(Text, nullable=False)
     msg_type = Column(SQLEnum(MessageType), default=MessageType.TEXT)
@@ -55,8 +55,8 @@ class ChatMessageRead(Base):
     __tablename__ = "chat_message_reads"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    message_id = Column(Integer, ForeignKey("chat_messages.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    message_id = Column(Integer, ForeignKey("chat_messages.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     read_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships

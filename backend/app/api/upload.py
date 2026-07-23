@@ -34,9 +34,6 @@ ALLOWED_EXTENSIONS = {
     # 文本
     "text/plain": ".txt",
     "text/csv": ".csv",
-    "text/html": ".html",
-    "text/css": ".css",
-    "text/javascript": ".js",
     "application/json": ".json",
     "application/xml": ".xml",
     # 压缩包

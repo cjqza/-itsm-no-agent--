@@ -144,7 +144,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, watch } from 'vue'
+import { ref, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ticketApi, chatApi, uploadApi } from '@/api'
@@ -239,11 +239,6 @@ function getBotReply(text) {
     if (text.includes(keyword)) return reply
   }
   return '感谢您的描述。为了更好地帮助您，请提供更多细节：\n1. 问题是什么时候开始的？\n2. 是否有错误提示信息？\n3. 是否可以截图？\n\n如果需要人工帮助，请输入"转人工"。'
-}
-
-// 在新标签页打开链接（保留首页对话状态）
-function openInNewTab(path) {
-  window.open(path, '_blank')
 }
 
 // 处理分类选择 - 创建工单 + 聊天室

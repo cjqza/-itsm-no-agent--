@@ -130,7 +130,7 @@ async function reviewReq(id, action) {
     await adminApi.reviewRequest(id, action)
     ElMessage.success(action === 'approved' ? '已批准' : '已拒绝')
     await loadRequests()
-  } catch (e) {}
+  } catch (e) { ElMessage.error('审批操作失败') }
 }
 
 function isAdminRole(role) { return role === 'admin' || role === 'super_admin' }

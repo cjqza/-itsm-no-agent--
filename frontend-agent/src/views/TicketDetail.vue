@@ -279,7 +279,7 @@ async function handleAccept() {
     await ticketApi.accept(ticketId)
     ElMessage.success('接单成功')
     await loadAll()
-  } catch (e) {}
+  } catch (e) { ElMessage.error('接单失败') }
 }
 
 async function handleStatus(status) {
@@ -287,7 +287,7 @@ async function handleStatus(status) {
     await ticketApi.updateStatus(ticketId, { status })
     ElMessage.success('状态更新成功')
     await loadAll()
-  } catch (e) {}
+  } catch (e) { ElMessage.error('状态更新失败') }
 }
 
 async function handleResolve() {
@@ -295,7 +295,7 @@ async function handleResolve() {
     await ticketApi.resolve(ticketId)
     ElMessage.success('已标记为待评价')
     await loadAll()
-  } catch (e) {}
+  } catch (e) { ElMessage.error('操作失败') }
 }
 
 async function handleTransfer() {
@@ -318,7 +318,7 @@ async function handleRemark() {
     showRemark.value = false
     ElMessage.success('标注已更新')
     await loadAll()
-  } catch (e) {}
+  } catch (e) { ElMessage.error('标注更新失败') }
 }
 
 async function handlePauseSla() {
@@ -326,7 +326,7 @@ async function handlePauseSla() {
     await ticketApi.remark(ticketId, { remark: '暂停计时', pause_ola: true })
     ElMessage.success('SLA已暂停')
     await loadAll()
-  } catch (e) {}
+  } catch (e) { ElMessage.error('SLA暂停失败') }
 }
 
 async function handleResumeSla() {
@@ -334,7 +334,7 @@ async function handleResumeSla() {
     await ticketApi.remark(ticketId, { remark: '恢复计时', pause_ola: false })
     ElMessage.success('SLA已恢复')
     await loadAll()
-  } catch (e) {}
+  } catch (e) { ElMessage.error('SLA恢复失败') }
 }
 
 async function sendChat() {

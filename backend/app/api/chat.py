@@ -83,38 +83,64 @@ async def get_my_rooms(
     )
     rooms = result.scalars().all()
 
+    if not rooms:
+        return []
+
+    room_ids = [room.id for room in rooms]
+
+    # 批量查询：每个房间的最后一条消息（通过 max(id) 子查询）
+    last_msg_subq = (
+        select(
+            ChatMessage.room_id,
+            func.max(ChatMessage.id).label("max_id"),
+        )
+        .where(ChatMessage.room_id.in_(room_ids))
+        .group_by(ChatMessage.room_id)
+        .subquery()
+    )
+    last_msg_result = await db.execute(
+        select(ChatMessage).join(
+            last_msg_subq, ChatMessage.id == last_msg_subq.c.max_id
+        )
+    )
+    last_msgs = {msg.room_id: msg for msg in last_msg_result.scalars().all()}
+
+    # 批量查询：每个房间的非本人消息总数
+    total_result = await db.execute(
+        select(
+            ChatMessage.room_id,
+            func.count(ChatMessage.id).label("cnt"),
+        )
+        .where(
+            ChatMessage.room_id.in_(room_ids),
+            ChatMessage.sender_id != current_user.id,
+        )
+        .group_by(ChatMessage.room_id)
+    )
+    total_counts = {row[0]: row[1] for row in total_result.all()}
+
+    # 批量查询：每个房间的已读消息数
+    read_result = await db.execute(
+        select(
+            ChatMessage.room_id,
+            func.count(ChatMessageRead.id).label("cnt"),
+        )
+        .select_from(ChatMessageRead)
+        .join(ChatMessage, ChatMessageRead.message_id == ChatMessage.id)
+        .where(
+            ChatMessage.room_id.in_(room_ids),
+            ChatMessageRead.user_id == current_user.id,
+        )
+        .group_by(ChatMessage.room_id)
+    )
+    read_counts = {row[0]: row[1] for row in read_result.all()}
+
+    # Python 中组装结果
     rooms_data = []
     for room in rooms:
-        # 获取最后一条消息
-        last_msg_result = await db.execute(
-            select(ChatMessage)
-            .where(ChatMessage.room_id == room.id)
-            .order_by(ChatMessage.created_at.desc())
-            .limit(1)
-        )
-        last_msg = last_msg_result.scalar_one_or_none()
-
-        # 获取未读数
-        from sqlalchemy import func as sa_func
-        total_result = await db.execute(
-            select(sa_func.count(ChatMessage.id))
-            .where(
-                ChatMessage.room_id == room.id,
-                ChatMessage.sender_id != current_user.id,
-            )
-        )
-        total = total_result.scalar() or 0
-
-        read_result = await db.execute(
-            select(sa_func.count(ChatMessageRead.id))
-            .where(
-                ChatMessageRead.user_id == current_user.id,
-                ChatMessageRead.message_id.in_(
-                    select(ChatMessage.id).where(ChatMessage.room_id == room.id)
-                ),
-            )
-        )
-        read_count = read_result.scalar() or 0
+        last_msg = last_msgs.get(room.id)
+        total = total_counts.get(room.id, 0)
+        read_count = read_counts.get(room.id, 0)
         unread = max(0, total - read_count)
 
         rooms_data.append({

@@ -35,49 +35,34 @@ async def dashboard(
     db: AsyncSession = Depends(get_db),
 ):
     """首页仪表盘"""
-    from sqlalchemy import func
+    from sqlalchemy import func, case, and_
     from app.models.ticket import Ticket, TicketStatus
 
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # 今日工单数
-    today_count = await db.execute(
-        select(func.count(Ticket.id)).where(Ticket.created_at >= today)
-    )
-
-    # 待处理（工单池）
-    pending_count = await db.execute(
-        select(func.count(Ticket.id)).where(Ticket.status == TicketStatus.PENDING)
-    )
-
-    # 我的待办
-    my_count = await db.execute(
-        select(func.count(Ticket.id)).where(
-            Ticket.assignee_id == current_user.id,
-            Ticket.status.in_([TicketStatus.ACCEPTED, TicketStatus.PROCESSING]),
+    # 合并为单条 SQL，减少数据库往返
+    result = await db.execute(
+        select(
+            func.count(case((Ticket.created_at >= today, 1))).label("today_count"),
+            func.count(case((Ticket.status == TicketStatus.PENDING, 1))).label("pending_count"),
+            func.count(case(
+                (and_(
+                    Ticket.assignee_id == current_user.id,
+                    Ticket.status.in_([TicketStatus.ACCEPTED, TicketStatus.PROCESSING]),
+                ), 1),
+            )).label("my_count"),
+            func.count(case((Ticket.status == TicketStatus.RESOLVED_PENDING_REVIEW, 1))).label("review_count"),
+            func.count(case((Ticket.status == TicketStatus.RESOLVED, 1))).label("resolved_count"),
         )
     )
-
-    # 待评价
-    review_count = await db.execute(
-        select(func.count(Ticket.id)).where(
-            Ticket.status == TicketStatus.RESOLVED_PENDING_REVIEW
-        )
-    )
-
-    # 已解决
-    resolved_count = await db.execute(
-        select(func.count(Ticket.id)).where(
-            Ticket.status == TicketStatus.RESOLVED
-        )
-    )
+    row = result.one()
 
     return {
-        "today_count": today_count.scalar() or 0,
-        "pending_count": pending_count.scalar() or 0,
-        "my_count": my_count.scalar() or 0,
-        "review_count": review_count.scalar() or 0,
-        "resolved_count": resolved_count.scalar() or 0,
+        "today_count": row.today_count or 0,
+        "pending_count": row.pending_count or 0,
+        "my_count": row.my_count or 0,
+        "review_count": row.review_count or 0,
+        "resolved_count": row.resolved_count or 0,
     }
 
 

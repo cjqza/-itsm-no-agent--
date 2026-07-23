@@ -135,7 +135,7 @@ async function loadData() {
   try {
     const result = await ticketApi.list({ page_size: 100 })
     allTickets.value = result.items || []
-  } catch (e) {}
+  } catch (e) { ElMessage.error('加载工单列表失败') }
 }
 
 // 草稿箱：待接单（pending）
@@ -164,7 +164,7 @@ async function handleAccept(ticket) {
     await ticketApi.accept(ticket.id)
     ElMessage.success('接单成功')
     await loadData()
-  } catch (e) {}
+  } catch (e) { ElMessage.error('接单失败') }
 }
 
 function goToDetail(t) { router.push(`/tickets/${t.id}`) }

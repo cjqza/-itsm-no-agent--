@@ -41,11 +41,11 @@ class Ticket(Base):
     description = Column(Text, nullable=True)
 
     # 状态
-    status = Column(SQLEnum(TicketStatus), default=TicketStatus.PENDING, nullable=False)
+    status = Column(SQLEnum(TicketStatus), default=TicketStatus.PENDING, nullable=False, index=True)
     priority = Column(SQLEnum(TicketPriority), default=TicketPriority.P3, nullable=False)
 
     # 分类
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True, index=True)
     business_module_id = Column(Integer, ForeignKey("business_modules.id"), nullable=True)
     property_id = Column(Integer, ForeignKey("properties.id"), nullable=True)
     symptom_id = Column(Integer, ForeignKey("symptoms.id"), nullable=True)
@@ -53,8 +53,8 @@ class Ticket(Base):
     solution_id = Column(Integer, ForeignKey("solutions.id"), nullable=True)
 
     # 人员
-    creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    assignee_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    creator_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    assignee_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     # SLA
     sla_hours = Column(Integer, default=4)
@@ -74,7 +74,7 @@ class Ticket(Base):
     remark = Column(Text, nullable=True)
 
     # 时间
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     accepted_at = Column(DateTime, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
@@ -96,7 +96,7 @@ class TicketLog(Base):
     __tablename__ = "ticket_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=False)
+    ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=False, index=True)
     operator_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     action = Column(String(64), nullable=False)
     old_value = Column(String(256), nullable=True)

@@ -66,6 +66,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ticketApi } from '@/api'
 import { ChatDotRound } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
@@ -78,7 +79,7 @@ onMounted(async () => {
   try {
     const dash = await ticketApi.dashboard()
     pendingCount.value = dash.pending_count || 0
-  } catch (e) {}
+  } catch (e) { ElMessage.error('加载仪表盘数据失败') }
 })
 
 function handleLogout() { store.logout(); router.push('/login') }
