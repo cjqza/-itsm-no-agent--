@@ -23,6 +23,7 @@
 - [x] 文件大小限制 10MB
 
 ### 1.3 我的工单
+- [x] 骨架屏加载态
 - [x] 工单列表（分页、状态筛选）
 - [x] 工单详情查看
 - [x] 点击工单进入聊天室
@@ -47,13 +48,18 @@
 
 ### 1.6 登录
 - [x] 账号密码登录（login_id 或手机号 + 密码）
-- [x] 账号注册申请（待审批）
+- [x] 账号注册即登录（自动分配 login_id，无需审批）
+- [x] 图形验证码（密码错误 3 次后触发）
+- [x] 账号锁定保护（密码错误 5 次锁定 15 分钟）
+- [x] 忘记密码（账号+姓名验证后重置密码）
+- [x] 全局错误边界（app.config.errorHandler）
 
 ---
 
 ## 二、ITSM 客服端（frontend-agent :5174）
 
 ### 2.1 工作台（Dashboard）
+- [x] 骨架屏加载态
 - [x] 四象限看板布局
   - 左上：草稿箱工单（待接单 pending）
   - 右上：待处理工单池（已受理 accepted）
@@ -65,6 +71,7 @@
 - [x] 待评价/已评价标签切换
 
 ### 2.2 服务请求（TicketList）
+- [x] 骨架屏加载态
 - [x] 工单列表（分页、搜索）
 - [x] 状态筛选（待接单、已接单、处理中、待评价、已解决）
 - [x] 点击进入工单详情
@@ -98,18 +105,25 @@
 
 ### 2.5 登录
 - [x] 账号密码登录（login_id 或手机号 + 密码）
+- [x] 图形验证码（密码错误 3 次后触发）
+- [x] 账号锁定保护（密码错误 5 次锁定 15 分钟）
+- [x] 忘记密码（账号+姓名验证后重置密码）
+- [x] 全局错误边界（app.config.errorHandler）
 
 ---
 
 ## 三、后台管理（frontend :5175）
 
 ### 3.1 权限管理
-- [x] 用户列表（分页、搜索）
+- [x] 用户列表（分页、四字段搜索：name/phone/login_id/feishu_user_id）
 - [x] 权限申请审批
 - [x] 账号注册申请审批（approve 分配 login_id）
 - [x] 启用/禁用用户
 - [x] 权限设置（itsm_access、ops_access、admin_access）
 - [x] admin_access 仅 super_admin 可修改
+- [x] 管理员创建（super_admin 可创建 admin/super_admin 账号）
+- [x] 客服管理 CRUD（创建/更新/删除客服账号）
+- [x] 审计日志查询（管理员关键操作追溯）
 
 ### 3.2 分类配置
 - [x] 管理单元 CRUD
@@ -121,12 +135,17 @@
 - [x] 账号密码登录（login_id 或手机号 + 密码）
 - [x] 管理员权限校验（路由守卫）
 - [x] 账号申请审批界面
+- [x] 图形验证码（密码错误 3 次后触发）
+- [x] 账号锁定保护（密码错误 5 次锁定 15 分钟）
+- [x] 忘记密码（账号+姓名验证后重置密码）
+- [x] 全局错误边界（app.config.errorHandler）
 
 ---
 
 ## 四、OPS 统计系统（frontend-ops :5176）
 
 ### 4.1 数据概览（Overview）
+- [x] 骨架屏加载态
 - [x] 今日工单数、待处理数、处理中数、已解决数
 - [x] 工单趋势图表（ECharts）
 - [x] 分类分布饼图
@@ -149,18 +168,23 @@
 
 ### 4.5 登录
 - [x] 账号密码登录（login_id 或手机号 + 密码）
+- [x] 图形验证码（密码错误 3 次后触发）
+- [x] 账号锁定保护（密码错误 5 次锁定 15 分钟）
+- [x] 忘记密码（账号+姓名验证后重置密码）
+- [x] 全局错误边界（app.config.errorHandler）
 
 ---
 
-## 五、后端 API（55 个端点）
+## 五、后端 API（67 个端点）
 
-### 5.1 认证（auth.py — 4 个）
+### 5.1 认证（auth.py + captcha.py — 5 个）
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | /api/auth/login | 登录（account: login_id/手机号 + password） |
-| POST | /api/auth/register | 账号注册申请（status=PENDING） |
+| POST | /api/auth/login | 登录（account: login_id/手机号 + password，3 次错误需验证码，5 次锁定 15 分钟） |
+| POST | /api/auth/register | 账号注册即登录（自动分配 login_id，返回 token） |
+| POST | /api/auth/reset-password | 忘记密码（account + name + new_password 验证后重置） |
 | GET | /api/auth/me | 获取当前用户信息 |
-| GET | /api/auth/permissions | 获取当前用户权限 |
+| GET | /api/auth/captcha | 获取图形验证码（图片 base64 + captcha_id，内部 verify 函数由登录/注册自动调用） |
 
 ### 5.2 工单管理（itsm.py — 18 个）
 | 方法 | 路径 | 说明 |
@@ -198,19 +222,25 @@
 | GET | /api/chat/rooms/{room_id}/unread | 未读数 |
 | WS | /api/chat/ws/{room_id} | WebSocket 实时聊天 |
 
-### 5.4 后台管理（admin.py — 17 个）
+### 5.4 后台管理（admin.py — 22 个）
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | /api/admin/users | 用户列表 |
+| GET | /api/admin/users | 用户列表（四字段搜索） |
 | PUT | /api/admin/users/{id} | 更新用户 |
 | PUT | /api/admin/users/{id}/status | 启用/禁用 |
+| POST | /api/admin/admins | 创建管理员（仅 super_admin） |
 | GET | /api/admin/permissions | 权限列表 |
-| GET | /api/admin/permission-requests | 权限申请列表 |
+| PUT | /api/admin/permissions/{user_id} | 修改权限 |
 | POST | /api/admin/permission-requests | 提交权限申请 |
+| GET | /api/admin/permission-requests | 权限申请列表 |
 | PUT | /api/admin/permission-requests/{id} | 审批权限申请 |
-| GET | /api/admin/agents | 客服列表（itsm_access） |
 | GET | /api/admin/account-requests | 账号注册申请列表 |
 | PUT | /api/admin/account-requests/{user_id} | 审批账号申请（approve 分配 login_id） |
+| GET | /api/admin/audit-logs | 审计日志查询（分页，支持 operator_id/action/date 筛选） |
+| GET | /api/admin/agents | 客服列表（itsm_access） |
+| POST | /api/admin/agents | 创建客服 |
+| PUT | /api/admin/agents/{user_id} | 更新客服 |
+| DELETE | /api/admin/agents/{user_id} | 删除客服 |
 | CRUD | /api/admin/categories/ | 管理单元 |
 | CRUD | /api/admin/business-modules/ | 业务模块 |
 | CRUD | /api/admin/properties/ | 性质 |
@@ -249,13 +279,16 @@
 ### 6.1 认证与权限
 - [x] JWT Token 认证
 - [x] 账号密码登录（login_id/手机号 + bcrypt 密码）
-- [x] 账号注册申请（status=PENDING，管理员审批后分配 login_id）
+- [x] 账号注册即登录（自动分配 login_id，返回 token）
+- [x] 图形验证码（Pillow 生成，4 位随机字符，内存存储 TTL 5 分钟）
+- [x] 账号锁定保护（密码错误 5 次锁定 15 分钟，3 次后需验证码）
+- [x] 忘记密码重置（account + name 验证后设置新密码）
 - [x] 三级权限体系（itsm_access、ops_access、admin_access）
 - [x] admin_access 仅 super_admin 可修改（非 super_admin 返回 403）
 - [x] 管理员/超级管理员自动拥有所有权限
 - [x] 权限申请 → 管理员审批流程
 - [x] 用户状态校验（PENDING/禁用用户无法登录）
-- [x] 登录限流（10 次/分钟）
+- [x] 登录限流（5 次/分钟，注册 3 次/小时，验证码 10 次/分钟）
 
 ### 6.2 实时通信
 - [x] WebSocket 聊天（per-room）
@@ -272,15 +305,21 @@
 - [x] SLA 预警列表
 
 ### 6.4 其他
-- [x] API 限流（登录 10/min，其他 120/min）
+- [x] API 限流（登录 5/min，注册 3/hour，验证码 10/min，其他 120/min）
 - [x] 文件上传（图片/文档/文本/压缩包，10MB，已移除 text/html/js/css 危险类型）
-- [x] 快捷回复模板
+- [x] 快捷回复模板（数据库持久化，支持 CRUD + 分类筛选 + 种子数据）
 - [x] 工单操作日志
+- [x] 管理员操作审计日志（AuditLog 模型，7 个关键操作自动记录，分页查询接口）
+- [x] 全局错误边界（四端 app.config.errorHandler）
+- [x] 骨架屏加载态（TicketList / Dashboard / MyTickets / Overview）
 - [x] 404 兜底路由
+- [x] 全局异常日志落盘（RotatingFileHandler，10MB 轮转 5 份）
 - [x] 数据库性能索引（tickets/ticket_logs/chat_messages/chat_message_reads 高频查询字段）
 - [x] 聊天室列表批量查询优化（get_my_rooms 从 1+3N → 4 次批量查询）
 - [x] Dashboard 统计合并查询（5 次独立 SELECT → 1 条 CASE SQL）
-- [x] 前端空 catch 块统一补错误提示（11 处）
+- [x] WebSocket 并行广播（asyncio.gather 替代顺序 await）
+- [x] 前端空 catch 块统一补错误提示（12 处）
+- [x] Pydantic 输入校验（rating 1-5、title 200 字、description 5000 字、模板 title/content 长度限制）
 
 ---
 

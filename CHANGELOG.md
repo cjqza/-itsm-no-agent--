@@ -2,6 +2,27 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-23] P2 优化：错误边界、骨架屏、管理员审计、忘记密码修复、前端全面美化、Agent 架构重构
+- **变更**：大量改动打包交付。(1) 全局错误边界：四端 main.js 注册 `app.config.errorHandler` 捕获未处理异常并 `console.error`。(2) 骨架屏：TicketList / Dashboard / MyTickets / Overview 四个列表页加载态从 spinner 改为 `el-skeleton`。(3) 管理员操作审计：新增 `AuditLog` 模型（audit_logs 表），admin.py 中 7 个关键操作（创建管理员、创建/更新/删除客服、审批权限、审批账号、修改权限）自动记录审计日志；新增 `GET /api/admin/audit-logs` 分页查询接口（支持 operator_id / action / date range 筛选）。(4) 忘记密码：新增 `POST /api/auth/reset-password`（account + name + new_password），四端 Login.vue 均增加忘记密码对话框；错误提示细分（验证码错误 400 / 账号姓名不匹配 400 / 新旧密码相同 400 / 账号锁定 423）。(5) 前端界面优化：22 个 Vue 文件全面美化（登录页渐变背景+居中卡片、Layout 侧边栏配色、表格/卡片圆角阴影、色彩间距统一）。(6) Agent 架构重构：新建 `front.md`（前端专家）、`backend.md`（后端专家）、`pm.md`（产品经理）三个 agent 定义；`coder.md` 改为调度中枢（不写代码，负责分派+审查+测试+提交）。(7) 后台管理增强：admin.py 新增 `POST /api/admin/admins`（super_admin 创建管理员）、`POST /api/admin/agents`（创建客服）、`PUT /api/admin/agents/{user_id}`（更新客服）、`DELETE /api/admin/agents/{user_id}`（删除客服）共 4 个新端点；用户列表搜索增强（支持 name / phone / login_id / feishu_user_id 四字段关键字搜索）；权限页改造为「账号管理」+ 客服 CRUD 入口。(8) 四端 api/index.js 新增 `resetPassword` 方法。
+- **原因**：P2 优化清单中的高价值项集中交付：前端缺少全局错误兜底；列表页加载态体验差；管理员关键操作无审计追溯；用户忘记密码无自助重置途径；前端视觉风格不统一；Agent 定义职责混乱；后台管理缺少客服 CRUD 和管理员创建能力。
+- **影响**：四端 `main.js`（错误边界）；`frontend-agent/src/views/TicketList.vue`、`frontend-agent/src/views/Dashboard.vue`、`frontend-client/src/views/MyTickets.vue`、`frontend-ops/src/views/Overview.vue`（骨架屏）；`backend/app/models/audit_log.py`（新建）、`backend/app/models/__init__.py`（导入）、`backend/app/api/admin.py`（审计记录 + admin/agents CRUD + 搜索增强）；`backend/app/api/auth.py`（reset-password 端点）；四端 `Login.vue`（忘记密码对话框 + 错误提示）；四端 `api/index.js`（resetPassword）；四端 22 个 Vue 文件（界面美化）；`.claude/agents/front.md`、`.claude/agents/backend.md`、`.claude/agents/pm.md`（新建）、`.claude/agents/coder.md`（重构）。前后端均有大量改动。
+- **提交**：`df718f8`
+- **测试**：73/73 全部通过。
+
+## [2026-07-23] P2 优化三项：Home.vue 空 catch 修复、WebSocket 并行广播、模板持久化
+- **变更**：三项 P2 优化。(1) Home.vue 文件发送失败的空 catch 块补 `ElMessage.error` 提示（P2 #12）。(2) `websocket.py` 全局广播和 `chat.py` 房间广播从顺序 `await` 改为 `asyncio.gather` 并行发送，减少多连接场景下的广播延迟（P2 #19）。(3) 快捷回复模板从内存 dict 存储改为数据库持久化：新增 `Template` 模型（templates 表，含 id/title/content/category/is_active/created_at/updated_at），`templates.py` 全部改用 DB CRUD，`seed_data.py` 增加 5 条模板种子数据，`alembic/env.py` 导入新模型（P2 #13）。
+- **原因**：Home.vue 空 catch 静默吞异常用户无感知；WebSocket 广播顺序 await 在连接数多时累积延迟；模板内存存储重启即丢失，无法跨会话复用。
+- **影响**：`frontend-client/src/views/Home.vue`（空 catch 修复）；`backend/app/utils/websocket.py`（并行广播）；`backend/app/api/chat.py`（并行广播）；`backend/app/api/templates.py`（DB CRUD 重写）；`backend/app/models/template.py`（新建）；`backend/app/models/__init__.py`（导入）；`backend/seed_data.py`（模板种子）；`backend/alembic/env.py`（模型导入）。前后端均有改动。
+- **提交**：`c41ee60`
+- **测试**：73/73 全部通过。
+
+## [2026-07-23] 登录安全加固：验证码、账号锁定、注册即登录、限流收紧
+- **变更**：六项后端安全加固。(1) User 模型扩展：新增 `login_fail_count`（密码错误计数）、`locked_until`（锁定截止时间）字段，新增 alembic 迁移 `b3c4d5e6f7a8`。(2) 验证码模块：新建 `captcha.py`，使用 Pillow 生成 4 位图形验证码（随机噪点+干扰线），内存存储 TTL 5 分钟；新增 `GET /api/auth/captcha` 获取验证码图片+key、`POST /api/auth/captcha/verify` 验证。(3) 注册改为即注册即登录：新用户注册后 status 直接为 ACTIVE（去掉 PENDING 审批），自动分配 login_id，登录后直接返回 token。(4) 登录安全加固：密码错误 5 次锁定 15 分钟（返回 423 + lock_remaining_seconds）；密码错误 3 次后需输入验证码（返回 400 + captcha_required=true）。(5) 限流收紧：登录从 10 次/分 改为 5 次/分，新增注册 3 次/小时、验证码获取 10 次/分。(6) 测试扩展至 73 个用例（新增账号锁定、验证码触发、注册即登录等），73/73 全部通过。
+- **原因**：原登录无防暴力破解机制（无锁定、无验证码）；注册流程需要管理员审批过于繁琐，内部系统可简化为即注册即登录；原限流阈值偏宽松。
+- **影响**：`backend/app/models/user.py`（login_fail_count/locked_until 字段）；`backend/app/api/auth.py`（登录锁定逻辑 + 注册即登录 + 错误提示细分）；`backend/app/api/captcha.py`（新建验证码模块）；`backend/app/main.py`（限流阈值调整 + 验证码限流）；`backend/app/utils/auth.py`（锁定状态检查）；`backend/alembic/versions/b3c4d5e6f7a8_add_login_security_fields.py`（迁移文件）；`backend/requirements.txt`（新增 Pillow 依赖）；`backend/tests/test_api.py`（测试扩展）。纯后端改动，前端无需适配。
+- **提交**：`87a6bb8`
+- **测试**：73/73 全部通过。
+
 ## [2026-07-23] 集中代码优化：数据库索引、N+1 查询修复、Dashboard 合并、上传安全、前端代码质量（7 项）
 - **变更**：七项集中优化打包交付。(1) 数据库索引：Ticket 的 status/created_at/assignee_id/creator_id/category_id 加 index=True，TicketLog 加 ticket_id 索引，ChatMessage 加 room_id 索引，ChatMessageRead 加 message_id/user_id 索引，共 9 个索引通过 alembic 迁移 `f7a8b9c0d1e2` 创建。(2) N+1 查询修复：`get_my_rooms` 从 1+3N 次查询优化为 4 次批量查询（rooms→last_messages→unread_counts→tickets 一次取回）。(3) Dashboard 查询合并：`/api/itsm/dashboard` 从 5 次独立 SELECT 合并为 1 条 CASE SQL，减少数据库往返。(4) 上传安全：移除 text/html、text/javascript、text/css 三种危险 MIME 类型白名单。(5) 前端空 catch 补错误提示：TicketDetail.vue 6 处、Dashboard.vue 2 处、Layout.vue/Categories.vue/Permissions.vue 各 1 处，共 11 处空 catch 块补 ElMessage.error。(6) 死代码清理：Home.vue 删除未使用 openInNewTab 函数及 onMounted import，AgentChat.vue 移除未使用 watch import，NoPermission.vue 移除未使用 `import api from '@/api'`。(7) frontend-ops main.js 补 zhCn locale 导入对齐其他三端。
 - **原因**：高频查询字段缺少索引导致大数据量下查询变慢；get_my_rooms 存在经典 N+1 问题；dashboard 多次独立查询可合并减少开销；上传白名单含 HTML/JS/CSS 存在 XSS 风险；前端空 catch 静默吞异常不利于排查；存在未使用的导入和函数属于死代码。
