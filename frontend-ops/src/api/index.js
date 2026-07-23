@@ -17,6 +17,8 @@ api.interceptors.response.use(
     const msg = error.response?.data?.detail || '请求失败'
     if (status === 401) {
       localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('permissions')
       router.push('/login')
       ElMessage.error('登录已过期')
     } else {

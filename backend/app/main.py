@@ -5,6 +5,8 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from collections import defaultdict
 import logging
+import logging.handlers
+import os
 import time
 import asyncio
 
@@ -24,9 +26,26 @@ from app.api.templates import router as template_router
 
 settings = get_settings()
 
+# 日志配置：控制台 + 文件（RotatingFileHandler）
+LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+_log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+_console_handler = logging.StreamHandler()
+_console_handler.setFormatter(_log_formatter)
+
+_file_handler = logging.handlers.RotatingFileHandler(
+    os.path.join(LOG_DIR, "app.log"),
+    maxBytes=10 * 1024 * 1024,  # 10MB
+    backupCount=5,
+    encoding="utf-8",
+)
+_file_handler.setFormatter(_log_formatter)
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[_console_handler, _file_handler],
 )
 logger = logging.getLogger(__name__)
 
@@ -176,10 +195,8 @@ async def value_error_handler(request: Request, exc: ValueError):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    import traceback
-    tb = traceback.format_exc()
-    print(f"ERROR: {exc}\n{tb}")
-    return JSONResponse(status_code=500, content={"detail": f"服务器内部错误: {str(exc)}"})
+    logger.error(f"未处理异常: {exc}", exc_info=True)
+    return JSONResponse(status_code=500, content={"detail": "服务器内部错误，请稍后重试"})
 
 
 # 注册路由

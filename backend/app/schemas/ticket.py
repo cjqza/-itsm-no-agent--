@@ -1,12 +1,12 @@
 """工单Schemas"""
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 
 
 class TicketCreate(BaseModel):
-    title: str
-    description: Optional[str] = None
+    title: str = Field(..., max_length=200)
+    description: Optional[str] = Field(None, max_length=5000)
     priority: str = "P3"
     category_id: Optional[int] = None
     creator_id: Optional[int] = None  # 可选，不传则自动使用当前用户ID
@@ -35,7 +35,7 @@ class TicketAssign(BaseModel):
 
 
 class TicketRate(BaseModel):
-    rating: int  # 1-5
+    rating: int = Field(..., ge=1, le=5)
     rating_comment: Optional[str] = None
 
 

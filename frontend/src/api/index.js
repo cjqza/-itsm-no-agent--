@@ -25,6 +25,7 @@ api.interceptors.response.use(
     if (status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
+      localStorage.removeItem('permissions')
       router.push('/login')
       ElMessage.error('登录已过期，请重新登录')
     } else if (status === 403) {

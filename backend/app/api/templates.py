@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 from app.database import get_db
@@ -24,14 +24,14 @@ _next_id = 7
 
 
 class TemplateCreate(BaseModel):
-    title: str
-    content: str
+    title: str = Field(..., max_length=100)
+    content: str = Field(..., max_length=5000)
     category: str = "通用"
 
 
 class TemplateUpdate(BaseModel):
-    title: Optional[str] = None
-    content: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=100)
+    content: Optional[str] = Field(None, max_length=5000)
     category: Optional[str] = None
 
 

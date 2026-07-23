@@ -241,12 +241,18 @@ async def send_message(
     if room.status == RoomStatus.CLOSED:
         raise HTTPException(status_code=400, detail="聊天室已关闭")
 
+    # 验证消息类型
+    try:
+        msg_type = MessageType(data.msg_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"不支持的消息类型: {data.msg_type}")
+
     # 保存消息
     msg = ChatMessage(
         room_id=room_id,
         sender_id=current_user.id,
         content=data.content,
-        msg_type=MessageType(data.msg_type),
+        msg_type=msg_type,
     )
     db.add(msg)
     await db.commit()

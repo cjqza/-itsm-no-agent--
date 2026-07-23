@@ -18,6 +18,8 @@ api.interceptors.response.use(
     console.error(`[API Error] ${status} ${error.config?.method?.toUpperCase()} ${error.config?.url}: ${msg}`)
     if (status === 401) {
       localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('permissions')
       router.push('/login')
       ElMessage.error('登录已过期')
     } else {
