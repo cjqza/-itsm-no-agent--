@@ -4,6 +4,7 @@
       <div class="sidebar-header"><h2>⚙️ 后台管理</h2></div>
       <el-menu :default-active="activeMenu" router background-color="#304156" text-color="#bfcbd9" active-text-color="#409eff">
         <el-menu-item index="/admin"><el-icon><Key /></el-icon><span>权限管理</span></el-menu-item>
+        <el-menu-item index="/admin/account-requests"><el-icon><UserFilled /></el-icon><span>账号审批</span></el-menu-item>
         <el-menu-item index="/admin/categories"><el-icon><Grid /></el-icon><span>分类配置</span></el-menu-item>
         <el-menu-item index="/admin/settings"><el-icon><Setting /></el-icon><span>系统设置</span></el-menu-item>
       </el-menu>

@@ -28,7 +28,7 @@ api.interceptors.response.use(
       router.push('/login')
       ElMessage.error('登录已过期，请重新登录')
     } else if (status === 403) {
-      ElMessage.error('没有权限访问')
+      ElMessage.warning(message)
     } else {
       ElMessage.error(message)
     }
@@ -83,6 +83,10 @@ export const adminApi = {
   deleteSolution: (id) => api.delete(`/admin/solutions/${id}`),
 
   getAgents: () => api.get('/admin/agents'),
+
+  // 账号审批
+  getAccountRequests: (status) => api.get('/admin/account-requests', { params: { status } }),
+  reviewAccountRequest: (userId, action) => api.put(`/admin/account-requests/${userId}`, null, { params: { action } }),
 }
 
 export default api

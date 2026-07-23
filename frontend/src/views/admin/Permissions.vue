@@ -25,9 +25,15 @@
                 <el-switch v-model="row.ops_access" :disabled="isAdminRole(row.user_role)" @change="updatePerm(row)" />
               </template>
             </el-table-column>
-            <el-table-column label="后台管理权限" width="120">
+            <el-table-column label="后台管理权限" width="140">
               <template #default="{ row }">
-                <el-switch v-model="row.admin_access" :disabled="isAdminRole(row.user_role)" @change="updatePerm(row)" />
+                <el-tooltip
+                  :disabled="!adminSwitchDisabled(row.user_role)"
+                  content="后台权限只能由 admin 修改"
+                  placement="top"
+                >
+                  <el-switch v-model="row.admin_access" :disabled="adminSwitchDisabled(row.user_role)" @change="updatePerm(row)" />
+                </el-tooltip>
               </template>
             </el-table-column>
           </el-table>
@@ -83,6 +89,9 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { adminApi } from '@/api'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
 
 const activeTab = ref('list')
 const permissions = ref([])
@@ -125,6 +134,7 @@ async function reviewReq(id, action) {
 }
 
 function isAdminRole(role) { return role === 'admin' || role === 'super_admin' }
+function adminSwitchDisabled(role) { return isAdminRole(role) || userStore.userRole !== 'super_admin' }
 function roleText(r) { return { user: '普通用户', agent: '客服', admin: '管理员', super_admin: '超级管理员' }[r] || r }
 function typeText(t) { return { itsm: 'ITSM系统', ops: 'OPS系统', admin: '后台管理' }[t] || t }
 function statusText(s) { return { pending: '待审批', approved: '已批准', rejected: '已拒绝' }[s] || s }
