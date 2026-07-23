@@ -86,21 +86,24 @@ def delete(path, token=None):
 def test_auth():
     section("1. Auth Test")
 
-    r = post("/auth/login", {"feishu_user_id": "admin"})
+    r = post("/auth/login", {"account": "admin", "password": "admin123"})
     ok = r["status"] == 200 and "token" in r["data"]
-    log("Auth", f"Admin login [{r['status']}]", ok)
+    log("Auth", f"Admin login (login_id) [{r['status']}]", ok)
     admin_token = r["data"].get("token", "")
 
-    r = post("/auth/login", {"feishu_user_id": "agent_1"})
-    log("Auth", f"Agent login [{r['status']}]", r["status"] == 200)
+    r = post("/auth/login", {"account": "13900000001", "password": "123456"})
+    log("Auth", f"Agent login (phone) [{r['status']}]", r["status"] == 200)
     agent_token = r["data"].get("token", "")
 
-    r = post("/auth/login", {"feishu_user_id": "user1"})
-    log("Auth", f"User login [{r['status']}]", r["status"] == 200)
+    r = post("/auth/login", {"account": "U00006", "password": "123456"})
+    log("Auth", f"User login (login_id) [{r['status']}]", r["status"] == 200)
     user_token = r["data"].get("token", "")
 
-    r = post("/auth/login", {"name": "admin"})
-    log("Auth", f"Name login [{r['status']}]", r["status"] == 200)
+    r = post("/auth/login", {"account": "admin", "password": "wrongpass"})
+    log("Auth", f"Wrong password rejected [{r['status']}]", r["status"] == 401)
+
+    r = post("/auth/login", {"account": "no_such_account_xyz", "password": "x"})
+    log("Auth", f"Unknown account rejected [{r['status']}]", r["status"] == 401)
 
     r = get("/auth/me", token=admin_token)
     log("Auth", f"Get me [{r['status']}]", r["status"] == 200)
@@ -325,6 +328,119 @@ def test_edge(admin_t):
     log("Edge", f"Invalid rating [{r['status']}]", r["status"] in [400, 422])
 
 
+# ========== 8. Account Register & Approval ==========
+def test_account_flow(admin_t):
+    section("8. Account Register & Approval Test")
+
+    phone = f"137{int(time.time()) % 100000000:08d}"
+    pwd = "reg123456"
+
+    # 注册申请
+    r = post("/auth/register", {"name": "申请用户", "phone": phone, "password": pwd})
+    log("Acct", f"Register [{r['status']}]", r["status"] == 200 and r["data"].get("success"))
+    new_uid = r["data"].get("user_id")
+
+    # 重复电话 -> 400
+    r = post("/auth/register", {"name": "重复用户", "phone": phone, "password": pwd})
+    log("Acct", f"Duplicate phone rejected [{r['status']}]", r["status"] == 400)
+
+    # 非法电话 -> 422 (Field 校验)
+    r = post("/auth/register", {"name": "x", "phone": "!!", "password": pwd})
+    log("Acct", f"Invalid phone rejected [{r['status']}]", r["status"] == 422)
+
+    # 未审批不能登录 -> 401
+    r = post("/auth/login", {"account": phone, "password": pwd})
+    log("Acct", f"Pending account cannot login [{r['status']}]", r["status"] == 401)
+
+    # 列出待审批
+    r = get("/admin/account-requests", token=admin_t, params={"status": "pending"})
+    ok = r["status"] == 200 and isinstance(r["data"], list) and any(u["id"] == new_uid for u in r["data"])
+    log("Acct", f"List pending requests [{r['status']}]", ok)
+
+    # 审批通过
+    login_id = None
+    if new_uid:
+        r = put(f"/admin/account-requests/{new_uid}", token=admin_t, params={"action": "approve"})
+        ok = r["status"] == 200 and r["data"].get("login_id", "").startswith("U")
+        login_id = r["data"].get("login_id")
+        log("Acct", f"Approve request [{r['status']}] login_id={login_id}", ok)
+
+    # 审批后可用电话登录
+    r = post("/auth/login", {"account": phone, "password": pwd})
+    log("Acct", f"Approved account can login (phone) [{r['status']}]", r["status"] == 200)
+
+    # 也可用分配的专属ID登录
+    if login_id:
+        r = post("/auth/login", {"account": login_id, "password": pwd})
+        log("Acct", f"Approved account can login (login_id) [{r['status']}]", r["status"] == 200)
+
+    # 重复审批已激活账号 -> 400
+    if new_uid:
+        r = put(f"/admin/account-requests/{new_uid}", token=admin_t, params={"action": "approve"})
+        log("Acct", f"Re-approve active account rejected [{r['status']}]", r["status"] == 400)
+
+    # 拒绝流程：再注册一个并 reject
+    phone2 = f"136{int(time.time()) % 100000000:08d}"
+    r = post("/auth/register", {"name": "待拒绝", "phone": phone2, "password": pwd})
+    uid2 = r["data"].get("user_id")
+    if uid2:
+        r = put(f"/admin/account-requests/{uid2}", token=admin_t, params={"action": "reject"})
+        log("Acct", f"Reject request [{r['status']}]", r["status"] == 200)
+        r = post("/auth/login", {"account": phone2, "password": pwd})
+        log("Acct", f"Rejected account cannot login [{r['status']}]", r["status"] == 401)
+
+
+# ========== 9. admin_access Permission Rule ==========
+def test_admin_access_rule(admin_t):
+    section("9. admin_access Permission Rule Test")
+
+    # 造一个拥有 admin_access 但非 super_admin 的账号
+    phone = f"135{int(time.time()) % 100000000:08d}"
+    pwd = "adm123456"
+    r = post("/auth/register", {"name": "后台账号", "phone": phone, "password": pwd})
+    uid = r["data"].get("user_id")
+    if uid:
+        put(f"/admin/account-requests/{uid}", token=admin_t, params={"action": "approve"})
+        # super_admin 授予其 admin_access（允许）
+        r = httpx.put(
+            f"{API}/admin/permissions/{uid}",
+            headers={"Authorization": f"Bearer {admin_t}"},
+            params={"admin_access": "true"},
+            timeout=TIMEOUT,
+        )
+        log("AdmRule", f"Super admin grants admin_access [{r.status_code}]", r.status_code == 200)
+
+    # 该账号登录
+    r = post("/auth/login", {"account": phone, "password": pwd})
+    sub_admin_t = r["data"].get("token", "") if r["status"] == 200 else ""
+
+    # 造一个目标普通用户
+    phone_t = f"134{int(time.time()) % 100000000:08d}"
+    r = post("/auth/register", {"name": "目标用户", "phone": phone_t, "password": pwd})
+    tgt = r["data"].get("user_id")
+    if tgt:
+        put(f"/admin/account-requests/{tgt}", token=admin_t, params={"action": "approve"})
+
+    if sub_admin_t and tgt:
+        # 非 super_admin 改 itsm_access -> 允许
+        r = httpx.put(
+            f"{API}/admin/permissions/{tgt}",
+            headers={"Authorization": f"Bearer {sub_admin_t}"},
+            params={"itsm_access": "true"},
+            timeout=TIMEOUT,
+        )
+        log("AdmRule", f"Non-super changes itsm_access allowed [{r.status_code}]", r.status_code == 200)
+
+        # 非 super_admin 改 admin_access -> 403
+        r = httpx.put(
+            f"{API}/admin/permissions/{tgt}",
+            headers={"Authorization": f"Bearer {sub_admin_t}"},
+            params={"admin_access": "true"},
+            timeout=TIMEOUT,
+        )
+        log("AdmRule", f"Non-super changes admin_access blocked [{r.status_code}]", r.status_code == 403)
+
+
 # ========== Main ==========
 def main():
     try:
@@ -354,6 +470,8 @@ def main():
     test_ops(admin_t)
     test_new_features(admin_t, agent_t)
     test_edge(admin_t)
+    test_account_flow(admin_t)
+    test_admin_access_rule(admin_t)
 
     elapsed = round(time.time() - t0, 2)
     total = passed + failed

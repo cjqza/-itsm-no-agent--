@@ -5,15 +5,34 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from passlib.context import CryptContext
 import logging
 
 from app.config import get_settings
 from app.database import get_db, AsyncSessionLocal
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, UserStatus
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 security = HTTPBearer()
+
+# 密码哈希上下文（bcrypt）
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def hash_password(password: str) -> str:
+    """生成密码哈希"""
+    return pwd_context.hash(password)
+
+
+def verify_password(password: str, password_hash: Optional[str]) -> bool:
+    """校验密码；password_hash 为空时一律失败"""
+    if not password_hash:
+        return False
+    try:
+        return pwd_context.verify(password, password_hash)
+    except Exception:
+        return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -47,6 +66,10 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=401, detail="用户不存在")
+
+    # 仅允许 active 状态的用户通过鉴权（pending/inactive 一律拒绝）
+    if user.status != UserStatus.ACTIVE:
+        raise HTTPException(status_code=401, detail="账号未激活或已被禁用")
 
     return user
 

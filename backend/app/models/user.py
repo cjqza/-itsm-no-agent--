@@ -16,6 +16,7 @@ class UserRole(str, enum.Enum):
 class UserStatus(str, enum.Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
+    PENDING = "pending"  # 待审批（注册申请中）
 
 
 class User(Base):
@@ -23,9 +24,11 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     feishu_user_id = Column(String(64), unique=True, index=True, nullable=True)
+    login_id = Column(String(32), unique=True, index=True, nullable=True)  # 专属ID号，审批通过时生成，如 U00001
+    password_hash = Column(String(256), nullable=True)  # 密码哈希（bcrypt）
     name = Column(String(128), nullable=False)
     email = Column(String(256), nullable=True)
-    phone = Column(String(32), nullable=True)
+    phone = Column(String(32), unique=True, index=True, nullable=True)  # 登录键，全局唯一
     avatar = Column(String(512), nullable=True)
     role = Column(SQLEnum(UserRole), default=UserRole.USER, nullable=False)
     department = Column(String(128), nullable=True)

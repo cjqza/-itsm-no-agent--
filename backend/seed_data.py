@@ -6,7 +6,13 @@ from app.models.category import Category, BusinessModule, Property, Symptom, Cau
 from app.models.permission import Permission
 from app.models.ticket import Ticket, TicketStatus, TicketLog, SLAStatus
 from app.utils.ticket_no import generate_ticket_no
+from app.utils.auth import hash_password
 from datetime import datetime, timedelta, timezone
+
+
+# 初始密码（种子账号统一密码，生产环境请修改）
+ADMIN_PASSWORD = "admin123"
+DEFAULT_PASSWORD = "123456"
 
 
 async def seed():
@@ -25,29 +31,46 @@ async def seed():
         # ============ 用户 ============
         admin = User(
             feishu_user_id="admin",
+            login_id="admin",
+            password_hash=hash_password(ADMIN_PASSWORD),
             name="系统管理员",
             email="admin@company.com",
+            phone="10000000000",
             role=UserRole.SUPER_ADMIN,
+            status=UserStatus.ACTIVE,
             is_online=1,
         )
         db.add(admin)
 
         agents = []
         agent_names = ["张三", "李四", "王五", "赵六", "钱七"]
+        default_hash = hash_password(DEFAULT_PASSWORD)
+        login_seq = 0  # 专属ID序号（U00001 起）
         for i, name in enumerate(agent_names):
+            login_seq += 1
             agent = User(
                 feishu_user_id=f"agent_{i+1}",
+                login_id=f"U{login_seq:05d}",
+                password_hash=default_hash,
                 name=name,
                 email=f"agent{i+1}@company.com",
+                phone=f"1390000{i+1:04d}",
                 role=UserRole.AGENT,
+                status=UserStatus.ACTIVE,
                 is_online=1 if i < 3 else 0,
             )
             db.add(agent)
             agents.append(agent)
 
         # 测试用户
-        user1 = User(feishu_user_id="user1", name="刘一", email="user1@company.com", role=UserRole.USER)
-        user2 = User(feishu_user_id="user2", name="陈二", email="user2@company.com", role=UserRole.USER)
+        login_seq += 1
+        user1 = User(feishu_user_id="user1", login_id=f"U{login_seq:05d}", password_hash=default_hash,
+                     name="刘一", email="user1@company.com", phone="13900010001",
+                     role=UserRole.USER, status=UserStatus.ACTIVE)
+        login_seq += 1
+        user2 = User(feishu_user_id="user2", login_id=f"U{login_seq:05d}", password_hash=default_hash,
+                     name="陈二", email="user2@company.com", phone="13900010002",
+                     role=UserRole.USER, status=UserStatus.ACTIVE)
         db.add(user1)
         db.add(user2)
 
@@ -145,9 +168,9 @@ async def seed():
 
         await db.commit()
         print(f"[OK] Seed data created:")
-        print(f"  Admin: 系统管理员")
-        print(f"  Agents: {', '.join(agent_names)}")
-        print(f"  Users: 刘一, 陈二")
+        print(f"  Admin: login_id=admin / password={ADMIN_PASSWORD} (super_admin)")
+        print(f"  Agents: {', '.join(agent_names)} (login_id U00001-U00005, password={DEFAULT_PASSWORD})")
+        print(f"  Users: 刘一(U00006), 陈二(U00007) (password={DEFAULT_PASSWORD})")
         print(f"  Categories: {len(categories_data)}")
         print(f"  Sample tickets: {len(sample_tickets)}")
 

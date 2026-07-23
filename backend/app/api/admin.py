@@ -80,6 +80,7 @@ async def list_users(
                 "name": u.name,
                 "email": u.email,
                 "phone": u.phone,
+                "login_id": u.login_id,
                 "role": u.role.value,
                 "department": u.department,
                 "status": u.status.value,
@@ -202,6 +203,11 @@ async def update_permission(
         perm = Permission(user_id=user_id)
         db.add(perm)
 
+    # 后台权限（admin_access）只能由 super_admin 修改
+    if admin_access is not None and admin_access != bool(perm.admin_access):
+        if current_user.role != UserRole.SUPER_ADMIN:
+            raise HTTPException(status_code=403, detail="后台权限只能由 admin 修改，请联系 admin")
+
     if itsm_access is not None:
         perm.itsm_access = itsm_access
     if ops_access is not None:
@@ -314,6 +320,90 @@ async def review_permission_request(
 
     await db.commit()
     return {"success": True}
+
+
+# ============ 账号申请审批 ============
+
+async def _generate_next_login_id(db: AsyncSession) -> str:
+    """生成下一个专属ID号，格式 U%05d（U00001 起递增）"""
+    result = await db.execute(
+        select(User.login_id).where(User.login_id.like("U%"))
+    )
+    max_seq = 0
+    for (lid,) in result.all():
+        if lid and lid.startswith("U") and lid[1:].isdigit():
+            max_seq = max(max_seq, int(lid[1:]))
+    return f"U{max_seq + 1:05d}"
+
+
+@router.get("/account-requests")
+async def list_account_requests(
+    status: str = Query("pending"),
+    current_user: User = Depends(require_permission("admin_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """账号申请列表（默认列出待审批账号）"""
+    try:
+        target_status = UserStatus(status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="状态值无效")
+
+    result = await db.execute(
+        select(User).where(User.status == target_status).order_by(User.created_at.desc())
+    )
+    users = result.scalars().all()
+    return [
+        {
+            "id": u.id,
+            "name": u.name,
+            "phone": u.phone,
+            "login_id": u.login_id,
+            "role": u.role.value,
+            "status": u.status.value,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        }
+        for u in users
+    ]
+
+
+@router.put("/account-requests/{user_id}")
+async def review_account_request(
+    user_id: int,
+    action: str = Query(..., description="approve 或 reject"),
+    current_user: User = Depends(require_permission("admin_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """审批账号申请：approve 分配 login_id 并激活；reject 置为 inactive"""
+    if action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="action 必须为 approve 或 reject")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    if user.status != UserStatus.PENDING:
+        raise HTTPException(status_code=400, detail="该账号不在待审批状态")
+
+    if action == "approve":
+        # 生成专属ID号（若已有则保留）
+        if not user.login_id:
+            user.login_id = await _generate_next_login_id(db)
+        user.status = UserStatus.ACTIVE
+        user.updated_at = datetime.now(timezone.utc)
+
+        # 建立空权限记录
+        perm_result = await db.execute(select(Permission).where(Permission.user_id == user.id))
+        if not perm_result.scalar_one_or_none():
+            db.add(Permission(user_id=user.id))
+
+        await db.commit()
+        return {"success": True, "action": "approve", "login_id": user.login_id}
+    else:
+        user.status = UserStatus.INACTIVE
+        user.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+        return {"success": True, "action": "reject"}
 
 
 # ============ 分类管理 CRUD ============
