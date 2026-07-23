@@ -2,6 +2,13 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-23] P1 安全余项：全局异常日志、删除 DEBUG print、401 清理一致性、输入校验（v2 优化 #6/#7/#9/#10）
+- **变更**：(1) #6 全局异常与日志：`main.py` 500 响应体改为通用文案不再泄露内部错误信息，日志增加 `RotatingFileHandler` 落盘 `backend/logs/app.log`（10MB 轮转 5 份），`print` 改用 `logger.error`。(2) #7 删除 DEBUG print：确认 `auth.py` 中已无遗留 `print`，无需改动。(3) #9 401 清理一致性：四端前端 `api/index.js` 的 401 拦截器统一清理 `token`、`user`、`permissions`（admin 前端原先只清 token 和 user，现已补齐 permissions）。(4) #10 输入校验：`chat.py` MessageType 转换增加 try/except 防御非法 `msg_type` 返回 400；`templates.py` TemplateCreate/Update 的 `title` 和 `content` 增加 `max_length` 约束；`schemas/ticket.py` TicketRate.rating 增加 `ge=1/le=5`、TicketCreate.title 增加 `max_length=200`、description 增加 `max_length=5000`。
+- **原因**：v2 优化方案 P0 已完成，P1 安全余项需补齐：生产环境 500 不应泄露内部错误；日志应落盘便于排查；前端 401 清理不一致会导致权限缓存残留；关键输入缺少长度/范围校验存在越界风险。
+- **影响**：`backend/app/main.py`（500 通用文案 + RotatingFileHandler + logger.error）；`backend/app/api/chat.py`（MessageType 防御）；`backend/app/api/templates.py`（max_length 校验）；`backend/app/schemas/ticket.py`（rating/title/description 校验）；`frontend-client/src/api/index.js`（401 清理 user+permissions）；`frontend-agent/src/api/index.js`（同上）；`frontend-ops/src/api/index.js`（同上）；`frontend/src/api/index.js`（401 清理 permissions）。前后端均有改动，不涉及数据库。
+- **提交**：`d7d73ec`
+- **测试**：`cd backend && python tests/test_api.py` 67/67 全部通过，无回归。
+
 ## [2026-07-23] 认证改造前端三项：用户注册入口、账号审批页、admin_access 规则提示（任务 C）
 - **变更**：前端三项打包交付。(1) C-1 用户端登录页底部增加「申请注册」入口，点击弹出注册对话框（姓名/电话/密码/确认密码，含前后端校验），authApi 新增 register 方法。(2) C-2 admin 前端新建 AccountRequests.vue 页面，展示待审批申请列表，支持批准（批准后显示分配的 login_id）与拒绝操作，adminApi 新增 getAccountRequests/reviewAccountRequest，路由与侧边栏菜单同步注册。(3) C-3 Permissions.vue 中 admin_access 权限开关对非 super_admin 用户禁用并附 tooltip 提示；403 拦截器改为展示后端 detail 错误信息；updatePermission 正确透传 admin_access 参数。
 - **原因**：任务 A 完成后端密码认证与账号审批接口，任务 B 完成登录页适配，任务 C 补齐前端交互层：用户注册入口、管理员审批页面、admin_access 权限规则的前端约束与提示。
