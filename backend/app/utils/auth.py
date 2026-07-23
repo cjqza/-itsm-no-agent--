@@ -74,6 +74,18 @@ async def get_current_user(
     return user
 
 
+async def generate_next_login_id(db: "AsyncSession") -> str:
+    """生成下一个专属ID号，格式 U%05d（U00001 起递增）"""
+    result = await db.execute(
+        select(User.login_id).where(User.login_id.like("U%"))
+    )
+    max_seq = 0
+    for (lid,) in result.all():
+        if lid and lid.startswith("U") and lid[1:].isdigit():
+            max_seq = max(max_seq, int(lid[1:]))
+    return f"U{max_seq + 1:05d}"
+
+
 def require_permission(permission_field: str):
     """权限检查装饰器工厂"""
     async def check_permission(

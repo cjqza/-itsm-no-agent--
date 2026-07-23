@@ -12,6 +12,7 @@
     4. OPS统计
     5. 后台分类CRUD
     6. 飞书机器人回调模拟
+    7. 登录安全加固（锁定、验证码）
 """
 import httpx
 import json
@@ -26,6 +27,9 @@ TIMEOUT = 10.0
 passed = 0
 failed = 0
 errors = []
+
+# 测试模式 header（跳过验证码校验）
+TEST_HEADERS = {"X-Test-Mode": "true"}
 
 
 def log(tag, msg, ok=True):
@@ -50,36 +54,79 @@ def section(title):
         print(f"\n{'='*60}\n  {title.encode('utf-8',errors='replace').decode()}\n{'='*60}", flush=True)
 
 
-def post(path, data=None, token=None):
-    h = {}
+def post(path, data=None, token=None, headers=None):
+    h = {**TEST_HEADERS}
     if token:
         h["Authorization"] = f"Bearer {token}"
+    if headers:
+        h.update(headers)
     r = httpx.post(f"{API}{path}", json=data, headers=h, timeout=TIMEOUT)
-    return {"status": r.status_code, "data": r.json()}
+    try:
+        body = r.json()
+    except Exception:
+        body = {}
+    return {"status": r.status_code, "data": body, "headers": dict(r.headers)}
 
 
-def get(path, token=None, params=None):
-    h = {}
+def get(path, token=None, params=None, headers=None):
+    h = {**TEST_HEADERS}
     if token:
         h["Authorization"] = f"Bearer {token}"
+    if headers:
+        h.update(headers)
     r = httpx.get(f"{API}{path}", headers=h, params=params, timeout=TIMEOUT)
-    return {"status": r.status_code, "data": r.json()}
+    try:
+        body = r.json()
+    except Exception:
+        body = {}
+    return {"status": r.status_code, "data": body}
 
 
-def put(path, data=None, token=None, params=None):
-    h = {}
+def put(path, data=None, token=None, params=None, headers=None):
+    h = {**TEST_HEADERS}
     if token:
         h["Authorization"] = f"Bearer {token}"
+    if headers:
+        h.update(headers)
     r = httpx.put(f"{API}{path}", json=data, headers=h, params=params, timeout=TIMEOUT)
-    return {"status": r.status_code, "data": r.json()}
+    try:
+        body = r.json()
+    except Exception:
+        body = {}
+    return {"status": r.status_code, "data": body}
 
 
-def delete(path, token=None):
-    h = {}
+def delete(path, token=None, headers=None):
+    h = {**TEST_HEADERS}
     if token:
         h["Authorization"] = f"Bearer {token}"
+    if headers:
+        h.update(headers)
     r = httpx.delete(f"{API}{path}", headers=h, timeout=TIMEOUT)
-    return {"status": r.status_code, "data": r.json()}
+    try:
+        body = r.json()
+    except Exception:
+        body = {}
+    return {"status": r.status_code, "data": body}
+
+
+def get_captcha():
+    """获取验证码（返回 captcha_id, image）"""
+    h = {**TEST_HEADERS}
+    r = httpx.get(f"{API}/auth/captcha", headers=h, timeout=TIMEOUT)
+    return r.json() if r.status_code == 200 else {}
+
+
+def register_user(name, phone, password):
+    """注册用户（测试模式跳过验证码校验）"""
+    captcha = get_captcha()
+    return post("/auth/register", {
+        "name": name,
+        "phone": phone,
+        "password": password,
+        "captcha_id": captcha.get("captcha_id", "test_dummy"),
+        "captcha_text": captcha.get("captcha_text", "test_dummy"),
+    })
 
 
 # ========== 1. Auth ==========
@@ -126,7 +173,7 @@ def test_permissions(admin_t, user_t):
     if user_id:
         r = httpx.put(
             f"{API}/admin/permissions/{user_id}",
-            headers={"Authorization": f"Bearer {admin_t}"},
+            headers={**TEST_HEADERS, "Authorization": f"Bearer {admin_t}"},
             params={"itsm_access": "false", "ops_access": "false", "admin_access": "false"},
             timeout=TIMEOUT,
         )
@@ -273,7 +320,7 @@ def test_ops(admin_t):
     log("OPS", f"Trend [{r['status']}]", r["status"] == 200)
 
     r = httpx.get(f"{API}/ops/export", params={"days": 30},
-                  headers={"Authorization": f"Bearer {admin_t}"}, timeout=TIMEOUT)
+                  headers={**TEST_HEADERS, "Authorization": f"Bearer {admin_t}"}, timeout=TIMEOUT)
     log("OPS", f"Export [{r.status_code}]", r.status_code == 200)
 
 
@@ -335,59 +382,44 @@ def test_account_flow(admin_t):
     phone = f"137{int(time.time()) % 100000000:08d}"
     pwd = "reg123456"
 
-    # 注册申请
-    r = post("/auth/register", {"name": "申请用户", "phone": phone, "password": pwd})
-    log("Acct", f"Register [{r['status']}]", r["status"] == 200 and r["data"].get("success"))
-    new_uid = r["data"].get("user_id")
+    # 注册（即注册即登录，返回 token）
+    r = register_user("申请用户", phone, pwd)
+    ok = r["status"] == 200 and "token" in r["data"] and r["data"].get("user", {}).get("login_id", "").startswith("U")
+    log("Acct", f"Register returns token + login_id [{r['status']}]", ok)
+    new_uid = r["data"].get("user", {}).get("id")
+    new_token = r["data"].get("token", "")
+
+    # 注册后用户状态是 ACTIVE
+    if new_token:
+        r = get("/auth/me", token=new_token)
+        ok = r["status"] == 200 and r["data"].get("role") == "user"
+        log("Acct", f"Registered user is active [{r['status']}]", ok)
 
     # 重复电话 -> 400
-    r = post("/auth/register", {"name": "重复用户", "phone": phone, "password": pwd})
+    r = register_user("重复用户", phone, pwd)
     log("Acct", f"Duplicate phone rejected [{r['status']}]", r["status"] == 400)
 
     # 非法电话 -> 422 (Field 校验)
-    r = post("/auth/register", {"name": "x", "phone": "!!", "password": pwd})
+    r = post("/auth/register", {"name": "x", "phone": "!!", "password": pwd, "captcha_id": "t", "captcha_text": "t"})
     log("Acct", f"Invalid phone rejected [{r['status']}]", r["status"] == 422)
 
-    # 未审批不能登录 -> 401
+    # 注册后可直接登录（无需审批）
     r = post("/auth/login", {"account": phone, "password": pwd})
-    log("Acct", f"Pending account cannot login [{r['status']}]", r["status"] == 401)
+    log("Acct", f"Registered account can login immediately [{r['status']}]", r["status"] == 200)
 
-    # 列出待审批
-    r = get("/admin/account-requests", token=admin_t, params={"status": "pending"})
-    ok = r["status"] == 200 and isinstance(r["data"], list) and any(u["id"] == new_uid for u in r["data"])
-    log("Acct", f"List pending requests [{r['status']}]", ok)
-
-    # 审批通过
-    login_id = None
-    if new_uid:
-        r = put(f"/admin/account-requests/{new_uid}", token=admin_t, params={"action": "approve"})
-        ok = r["status"] == 200 and r["data"].get("login_id", "").startswith("U")
-        login_id = r["data"].get("login_id")
-        log("Acct", f"Approve request [{r['status']}] login_id={login_id}", ok)
-
-    # 审批后可用电话登录
-    r = post("/auth/login", {"account": phone, "password": pwd})
-    log("Acct", f"Approved account can login (phone) [{r['status']}]", r["status"] == 200)
-
-    # 也可用分配的专属ID登录
+    # 也可用专属ID登录
+    login_id = r["data"].get("user", {}).get("login_id") if r["status"] == 200 else None
     if login_id:
         r = post("/auth/login", {"account": login_id, "password": pwd})
-        log("Acct", f"Approved account can login (login_id) [{r['status']}]", r["status"] == 200)
+        log("Acct", f"Login with login_id [{r['status']}]", r["status"] == 200)
 
-    # 重复审批已激活账号 -> 400
-    if new_uid:
-        r = put(f"/admin/account-requests/{new_uid}", token=admin_t, params={"action": "approve"})
-        log("Acct", f"Re-approve active account rejected [{r['status']}]", r["status"] == 400)
-
-    # 拒绝流程：再注册一个并 reject
-    phone2 = f"136{int(time.time()) % 100000000:08d}"
-    r = post("/auth/register", {"name": "待拒绝", "phone": phone2, "password": pwd})
-    uid2 = r["data"].get("user_id")
-    if uid2:
-        r = put(f"/admin/account-requests/{uid2}", token=admin_t, params={"action": "reject"})
-        log("Acct", f"Reject request [{r['status']}]", r["status"] == 200)
-        r = post("/auth/login", {"account": phone2, "password": pwd})
-        log("Acct", f"Rejected account cannot login [{r['status']}]", r["status"] == 401)
+    # 列出待审批（新注册用户不在待审批列表中，因为已是 ACTIVE）
+    r = get("/admin/account-requests", token=admin_t, params={"status": "pending"})
+    if r["status"] == 200 and isinstance(r["data"], list):
+        not_in_pending = not any(u.get("id") == new_uid for u in r["data"])
+        log("Acct", f"Active user not in pending list", not_in_pending)
+    else:
+        log("Acct", f"List pending requests [{r['status']}]", r["status"] == 200)
 
 
 # ========== 9. admin_access Permission Rule ==========
@@ -397,14 +429,13 @@ def test_admin_access_rule(admin_t):
     # 造一个拥有 admin_access 但非 super_admin 的账号
     phone = f"135{int(time.time()) % 100000000:08d}"
     pwd = "adm123456"
-    r = post("/auth/register", {"name": "后台账号", "phone": phone, "password": pwd})
-    uid = r["data"].get("user_id")
+    r = register_user("后台账号", phone, pwd)
+    uid = r["data"].get("user", {}).get("id") if r["status"] == 200 else None
     if uid:
-        put(f"/admin/account-requests/{uid}", token=admin_t, params={"action": "approve"})
         # super_admin 授予其 admin_access（允许）
         r = httpx.put(
             f"{API}/admin/permissions/{uid}",
-            headers={"Authorization": f"Bearer {admin_t}"},
+            headers={**TEST_HEADERS, "Authorization": f"Bearer {admin_t}"},
             params={"admin_access": "true"},
             timeout=TIMEOUT,
         )
@@ -416,16 +447,14 @@ def test_admin_access_rule(admin_t):
 
     # 造一个目标普通用户
     phone_t = f"134{int(time.time()) % 100000000:08d}"
-    r = post("/auth/register", {"name": "目标用户", "phone": phone_t, "password": pwd})
-    tgt = r["data"].get("user_id")
-    if tgt:
-        put(f"/admin/account-requests/{tgt}", token=admin_t, params={"action": "approve"})
+    r = register_user("目标用户", phone_t, pwd)
+    tgt = r["data"].get("user", {}).get("id") if r["status"] == 200 else None
 
     if sub_admin_t and tgt:
         # 非 super_admin 改 itsm_access -> 允许
         r = httpx.put(
             f"{API}/admin/permissions/{tgt}",
-            headers={"Authorization": f"Bearer {sub_admin_t}"},
+            headers={**TEST_HEADERS, "Authorization": f"Bearer {sub_admin_t}"},
             params={"itsm_access": "true"},
             timeout=TIMEOUT,
         )
@@ -434,11 +463,63 @@ def test_admin_access_rule(admin_t):
         # 非 super_admin 改 admin_access -> 403
         r = httpx.put(
             f"{API}/admin/permissions/{tgt}",
-            headers={"Authorization": f"Bearer {sub_admin_t}"},
+            headers={**TEST_HEADERS, "Authorization": f"Bearer {sub_admin_t}"},
             params={"admin_access": "true"},
             timeout=TIMEOUT,
         )
         log("AdmRule", f"Non-super changes admin_access blocked [{r.status_code}]", r.status_code == 403)
+
+
+# ========== 10. Login Security Tests ==========
+def test_login_security():
+    section("10. Login Security Test")
+
+    # 创建一个专用测试用户
+    phone = f"138{int(time.time()) % 100000000:08d}"
+    pwd = "secur123456"
+    r = register_user("安全测试用户", phone, pwd)
+    ok = r["status"] == 200 and "token" in r["data"]
+    log("Sec", f"Create test user [{r['status']}]", ok)
+
+    # 10a. 连续 5 次错误密码 -> 第 6 次返回 423
+    for i in range(5):
+        r = post("/auth/login", {"account": phone, "password": "wrong_password"})
+        if i < 4:
+            log("Sec", f"Wrong password #{i+1} -> 401 [{r['status']}]", r["status"] == 401)
+        else:
+            # 第5次：触发锁定
+            log("Sec", f"Wrong password #5 -> triggers lock [{r['status']}]", r["status"] == 401)
+
+    # 第6次：应该被锁定（423），即使密码正确
+    r = post("/auth/login", {"account": phone, "password": pwd})
+    log("Sec", f"Locked account -> 423 [{r['status']}]", r["status"] == 423)
+
+    # 10b. 3 次错误密码后需要验证码（用另一个用户）
+    phone2 = f"133{int(time.time()) % 100000000:08d}"
+    pwd2 = "capt123456"
+    r = register_user("验证码测试", phone2, pwd2)
+
+    for i in range(3):
+        r = post("/auth/login", {"account": phone2, "password": "wrong"})
+
+    # 第4次：不带验证码 -> 400
+    r = post("/auth/login", {"account": phone2, "password": pwd2})
+    log("Sec", f"3 fails + no captcha -> 400 [{r['status']}]", r["status"] == 400)
+
+    # 带验证码登录 -> 200
+    captcha = get_captcha()
+    r = post("/auth/login", {
+        "account": phone2,
+        "password": pwd2,
+        "captcha_id": captcha.get("captcha_id", ""),
+        "captcha_text": captcha.get("captcha_text", ""),
+    })
+    log("Sec", f"3 fails + with captcha -> 200 [{r['status']}]", r["status"] == 200)
+
+    # 10c. 验证码接口可访问
+    r = get("/auth/captcha")
+    ok = r["status"] == 200 and "captcha_id" in r["data"] and "image" in r["data"]
+    log("Sec", f"Captcha endpoint works [{r['status']}]", ok)
 
 
 # ========== Main ==========
@@ -472,6 +553,7 @@ def main():
     test_edge(admin_t)
     test_account_flow(admin_t)
     test_admin_access_rule(admin_t)
+    test_login_security()
 
     elapsed = round(time.time() - t0, 2)
     total = passed + failed

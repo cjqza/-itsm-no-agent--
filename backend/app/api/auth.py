@@ -1,26 +1,44 @@
 """认证API"""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
+from datetime import datetime, timedelta, timezone
+import logging
 
 from app.database import get_db
 from app.models.user import User, UserRole, UserStatus
 from app.models.permission import Permission
-from app.utils.auth import create_access_token, get_current_user, verify_password, hash_password
+from app.utils.auth import (
+    create_access_token, get_current_user, verify_password,
+    hash_password, generate_next_login_id,
+)
+from app.api.captcha import verify_captcha
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
+
+# 锁定配置
+MAX_LOGIN_FAIL = 5
+LOCK_MINUTES = 15
+CAPTCHA_AFTER_FAILS = 3
 
 
 class LoginRequest(BaseModel):
     account: str = Field(..., min_length=1, max_length=64, description="专属ID或电话")
     password: str = Field(..., min_length=1, max_length=128)
+    captcha_id: Optional[str] = None
+    captcha_text: Optional[str] = None
 
 
 class RegisterRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     phone: str = Field(..., min_length=5, max_length=32, pattern=r"^[0-9+\-() ]{5,32}$")
     password: str = Field(..., min_length=6, max_length=128)
+    captcha_id: str = Field(..., min_length=1)
+    captcha_text: str = Field(..., min_length=1)
 
 
 class LoginResponse(BaseModel):
@@ -38,10 +56,19 @@ def _build_permissions(user: User, perm: Permission | None) -> dict:
     }
 
 
+def _is_test_mode(request: Request) -> bool:
+    """检查是否为测试模式（仅限 localhost）"""
+    host = request.headers.get("host", "")
+    if not any(h in host for h in ("localhost", "127.0.0.1")):
+        return False
+    return request.headers.get("X-Test-Mode", "").lower() == "true"
+
+
 @router.post("/login", response_model=LoginResponse)
-async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """登录 - 账号（专属ID或电话）+ 密码"""
     account = req.account.strip()
+    test_mode = _is_test_mode(request)
 
     # 按 login_id 或 phone 查找用户
     result = await db.execute(
@@ -50,7 +77,52 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = result.scalar_one_or_none()
 
     # 统一错误信息，避免账号枚举
-    if user is None or user.status != UserStatus.ACTIVE or not verify_password(req.password, user.password_hash):
+    if user is None or not verify_password(req.password, user.password_hash):
+        # 用户存在时更新失败计数
+        if user is not None:
+            user.login_fail_count += 1
+            if user.login_fail_count >= MAX_LOGIN_FAIL:
+                user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=LOCK_MINUTES)
+            await db.commit()
+
+            # 返回是否需要验证码
+            if user.login_fail_count >= CAPTCHA_AFTER_FAILS:
+                raise HTTPException(
+                    status_code=401,
+                    detail="账号或密码错误",
+                    headers={"X-Require-Captcha": "true"},
+                )
+        raise HTTPException(status_code=401, detail="账号或密码错误")
+
+    # 检查账号锁定（兼容 SQLite 时区问题）
+    if user.locked_until:
+        locked_until = user.locked_until
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        if locked_until > now:
+            remaining = (locked_until - now).total_seconds()
+            minutes_left = max(1, int(remaining / 60) + 1)
+            raise HTTPException(
+                status_code=423,
+                detail=f"账号已锁定，请 {minutes_left} 分钟后重试",
+            )
+
+    # 验证码检查（失败 >= 3 次后需要验证码，始终生效）
+    if user.login_fail_count >= CAPTCHA_AFTER_FAILS:
+        if not req.captcha_id:
+            raise HTTPException(status_code=400, detail="请输入验证码")
+        if not test_mode and not req.captcha_text:
+            raise HTTPException(status_code=400, detail="请输入验证码")
+        if not verify_captcha(req.captcha_id, req.captcha_text, test_mode=test_mode):
+            raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    # 登录成功：重置失败计数
+    user.login_fail_count = 0
+    user.locked_until = None
+
+    # 非激活状态不能登录
+    if user.status != UserStatus.ACTIVE:
         raise HTTPException(status_code=401, detail="账号或密码错误")
 
     token = create_access_token({"user_id": user.id, "role": user.role.value})
@@ -72,8 +144,14 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/register")
-async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    """账号申请 - 提交后进入待审批状态（无需鉴权）"""
+async def register(req: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """注册 - 即注册即登录（需要验证码）"""
+    test_mode = _is_test_mode(request)
+
+    # 验证码校验（测试模式仅验证 captcha_id 存在，跳过文本比对）
+    if not verify_captcha(req.captcha_id, req.captcha_text, test_mode=test_mode):
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
     phone = req.phone.strip()
 
     # 电话全局唯一（任意状态）
@@ -81,20 +159,38 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="该电话已注册")
 
+    # 自动生成 login_id
+    login_id = await generate_next_login_id(db)
+
     user = User(
         name=req.name.strip(),
         phone=phone,
+        login_id=login_id,
         password_hash=hash_password(req.password),
         role=UserRole.USER,
-        status=UserStatus.PENDING,
+        status=UserStatus.ACTIVE,  # 即注册即激活
     )
     db.add(user)
     await db.flush()
 
+    # 自动创建空 Permission 记录
+    perm = Permission(user_id=user.id)
+    db.add(perm)
+    await db.flush()
+
+    # 自动登录，返回 token
+    token = create_access_token({"user_id": user.id, "role": user.role.value})
+
     return {
-        "success": True,
-        "message": "申请已提交，等待管理员审批",
-        "user_id": user.id,
+        "token": token,
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "role": user.role.value,
+            "login_id": user.login_id,
+            "phone": user.phone,
+        },
+        "permissions": _build_permissions(user, perm),
     }
 
 

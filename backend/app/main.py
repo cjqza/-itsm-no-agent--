@@ -23,6 +23,7 @@ from app.api.admin import (
 )
 from app.api.upload import router as upload_router
 from app.api.templates import router as template_router
+from app.api.captcha import router as captcha_router
 
 settings = get_settings()
 
@@ -130,6 +131,10 @@ def _check_rate_limit(client_ip: str, path: str, limit: int, window: int = 60) -
     # 确定限流分组
     if "/auth/login" in path:
         group = "login"
+    elif "/auth/register" in path:
+        group = "register"
+    elif "/auth/captcha" in path:
+        group = "captcha"
     else:
         group = "api"
 
@@ -155,12 +160,34 @@ async def rate_limit_middleware(request: Request, call_next):
     if path.startswith("/api/chat/ws/"):
         return await call_next(request)
 
+    # 测试模式跳过限流（仅限 localhost）
+    if request.headers.get("X-Test-Mode", "").lower() == "true":
+        client_host = request.client.host if request.client else ""
+        if client_host in ("127.0.0.1", "::1", "localhost"):
+            return await call_next(request)
+
     client_ip = _get_client_ip(request)
 
-    # 登录接口: 10次/分钟
+    # 登录接口: 5次/分钟/IP
     if "/auth/login" in path:
-        if not _check_rate_limit(client_ip, path, limit=10, window=60):
+        if not _check_rate_limit(client_ip, path, limit=5, window=60):
             logger.warning(f"限流: {client_ip} 登录接口请求过于频繁")
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "请求过于频繁，请稍后再试"},
+            )
+    # 注册接口: 3次/小时/IP
+    elif "/auth/register" in path:
+        if not _check_rate_limit(client_ip, path, limit=3, window=3600):
+            logger.warning(f"限流: {client_ip} 注册接口请求过于频繁")
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "请求过于频繁，请稍后再试"},
+            )
+    # 验证码接口: 10次/分钟/IP
+    elif "/auth/captcha" in path:
+        if not _check_rate_limit(client_ip, path, limit=10, window=60):
+            logger.warning(f"限流: {client_ip} 验证码接口请求过于频繁")
             return JSONResponse(
                 status_code=429,
                 content={"detail": "请求过于频繁，请稍后再试"},
@@ -201,6 +228,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # 注册路由
 app.include_router(auth_router)
+app.include_router(captcha_router)
 app.include_router(itsm_router)
 app.include_router(ops_router)
 app.include_router(chat_router)

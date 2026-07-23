@@ -17,7 +17,7 @@ from app.schemas.category import (
     BusinessModuleCreate, BusinessModuleUpdate, BusinessModuleOut,
     GenericItemCreate, GenericItemUpdate, GenericItemOut,
 )
-from app.utils.auth import require_permission, get_current_user
+from app.utils.auth import require_permission, get_current_user, generate_next_login_id, hash_password
 
 router = APIRouter(prefix="/api/admin", tags=["后台管理"])
 
@@ -29,10 +29,20 @@ class UserUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     department: Optional[str] = None
+    password: Optional[str] = None
 
 
 class UserStatusUpdate(BaseModel):
     status: str  # active / inactive
+
+
+class AdminCreate(BaseModel):
+    name: str
+    phone: str
+    password: str
+    email: Optional[str] = None
+    department: Optional[str] = None
+    role: Optional[str] = "admin"  # "admin" 或 "super_admin"
 
 
 # ============ 用户管理 ============
@@ -46,14 +56,25 @@ async def list_users(
     current_user: User = Depends(require_permission("admin_access")),
     db: AsyncSession = Depends(get_db),
 ):
-    """用户列表（分页）"""
+    """用户列表（分页）
+
+    默认只展示管理员和客服；有 keyword 时搜索全部用户（包括普通用户）。
+    """
     conditions = []
     if keyword:
         conditions.append(
-            (User.name.like(f"%{keyword}%")) | (User.email.like(f"%{keyword}%"))
+            (User.name.like(f"%{keyword}%")) |
+            (User.email.like(f"%{keyword}%")) |
+            (User.login_id.like(f"%{keyword}%")) |
+            (User.phone.like(f"%{keyword}%"))
         )
     if role:
         conditions.append(User.role == role)
+    elif not keyword:
+        # 无 keyword 且无 role 筛选时，默认只返回管理员和客服
+        conditions.append(User.role.in_([
+            UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.AGENT
+        ]))
 
     # 计数
     count_query = select(func.count(User.id))
@@ -105,14 +126,25 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
+    # 普通管理员不能修改超级管理员的信息
+    if user.role == UserRole.SUPER_ADMIN and current_user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="无权修改超级管理员信息")
+
+    # 检查手机号冲突
+    if data.phone is not None and data.phone != user.phone:
+        dup = await db.execute(select(User).where(User.phone == data.phone, User.id != user_id))
+        if dup.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="该手机号已被其他用户使用")
+        user.phone = data.phone
+
     if data.name is not None:
         user.name = data.name
     if data.email is not None:
         user.email = data.email
-    if data.phone is not None:
-        user.phone = data.phone
     if data.department is not None:
         user.department = data.department
+    if data.password:
+        user.password_hash = hash_password(data.password)
 
     user.updated_at = datetime.now(timezone.utc)
     await db.commit()
@@ -149,25 +181,94 @@ async def update_user_status(
     return {"success": True, "status": user.status.value}
 
 
+@router.post("/admins")
+async def create_admin(
+    data: AdminCreate,
+    current_user: User = Depends(require_permission("admin_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """新增管理员（仅超级管理员可调用）"""
+    if current_user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="只有超级管理员可以创建管理员账号")
+
+    # 校验 role 参数
+    if data.role not in ("admin", "super_admin"):
+        raise HTTPException(status_code=400, detail="role 必须为 admin 或 super_admin")
+
+    # 检查手机号唯一性
+    existing = await db.execute(select(User).where(User.phone == data.phone))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="该手机号已被注册")
+
+    login_id = await generate_next_login_id(db)
+    target_role = UserRole.SUPER_ADMIN if data.role == "super_admin" else UserRole.ADMIN
+
+    admin_user = User(
+        name=data.name,
+        phone=data.phone,
+        login_id=login_id,
+        password_hash=hash_password(data.password),
+        email=data.email,
+        department=data.department,
+        role=target_role,
+        status=UserStatus.ACTIVE,
+    )
+    db.add(admin_user)
+    await db.flush()
+
+    perm = Permission(
+        user_id=admin_user.id,
+        itsm_access=True,
+        ops_access=True,
+        admin_access=True,
+        admin_approved_by=current_user.id,
+    )
+    db.add(perm)
+    await db.commit()
+
+    return {
+        "success": True,
+        "user": {
+            "id": admin_user.id,
+            "name": admin_user.name,
+            "phone": admin_user.phone,
+            "login_id": admin_user.login_id,
+            "email": admin_user.email,
+            "department": admin_user.department,
+            "role": admin_user.role.value,
+            "status": admin_user.status.value,
+        },
+    }
+
+
 # ============ 权限管理 ============
 
 @router.get("/permissions")
 async def list_permissions(
+    keyword: Optional[str] = None,
     current_user: User = Depends(require_permission("admin_access")),
     db: AsyncSession = Depends(get_db),
 ):
     """权限列表"""
-    result = await db.execute(
-        select(Permission, User)
-        .join(User, Permission.user_id == User.id)
-        .order_by(User.id)
-    )
+    query = select(Permission, User).join(User, Permission.user_id == User.id)
+    if keyword:
+        query = query.where(
+            (User.name.like(f"%{keyword}%")) |
+            (User.email.like(f"%{keyword}%")) |
+            (User.login_id.like(f"%{keyword}%")) |
+            (User.phone.like(f"%{keyword}%"))
+        )
+    query = query.order_by(User.id)
+    result = await db.execute(query)
     return [
         {
             "id": perm.id,
             "user_id": perm.user_id,
             "user_name": user.name,
             "user_role": user.role.value,
+            "login_id": user.login_id,
+            "phone": user.phone,
+            "email": user.email,
             "itsm_access": perm.itsm_access,
             "ops_access": perm.ops_access,
             "admin_access": perm.admin_access,
@@ -324,18 +425,6 @@ async def review_permission_request(
 
 # ============ 账号申请审批 ============
 
-async def _generate_next_login_id(db: AsyncSession) -> str:
-    """生成下一个专属ID号，格式 U%05d（U00001 起递增）"""
-    result = await db.execute(
-        select(User.login_id).where(User.login_id.like("U%"))
-    )
-    max_seq = 0
-    for (lid,) in result.all():
-        if lid and lid.startswith("U") and lid[1:].isdigit():
-            max_seq = max(max_seq, int(lid[1:]))
-    return f"U{max_seq + 1:05d}"
-
-
 @router.get("/account-requests")
 async def list_account_requests(
     status: str = Query("pending"),
@@ -388,7 +477,7 @@ async def review_account_request(
     if action == "approve":
         # 生成专属ID号（若已有则保留）
         if not user.login_id:
-            user.login_id = await _generate_next_login_id(db)
+            user.login_id = await generate_next_login_id(db)
         user.status = UserStatus.ACTIVE
         user.updated_at = datetime.now(timezone.utc)
 
@@ -517,3 +606,132 @@ async def list_agents(
         }
         for a in agents
     ]
+
+
+# ============ 客服增删改查 Schemas ============
+
+class AgentCreate(BaseModel):
+    name: str
+    phone: str
+    password: str
+    email: Optional[str] = None
+    department: Optional[str] = None
+
+
+class AgentUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    password: Optional[str] = None
+    email: Optional[str] = None
+    department: Optional[str] = None
+
+
+# ============ 客服增删改查 ============
+
+@router.post("/agents")
+async def create_agent(
+    data: AgentCreate,
+    current_user: User = Depends(require_permission("admin_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """新增客服"""
+    # 检查手机号是否已存在
+    existing = await db.execute(select(User).where(User.phone == data.phone))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="该手机号已被注册")
+
+    login_id = await generate_next_login_id(db)
+
+    agent = User(
+        name=data.name,
+        phone=data.phone,
+        login_id=login_id,
+        password_hash=hash_password(data.password),
+        email=data.email,
+        department=data.department,
+        role=UserRole.AGENT,
+        status=UserStatus.ACTIVE,
+    )
+    db.add(agent)
+    await db.flush()  # 获取 agent.id
+
+    # 创建默认权限
+    perm = Permission(
+        user_id=agent.id,
+        itsm_access=True,
+        ops_access=True,
+    )
+    db.add(perm)
+    await db.commit()
+
+    return {
+        "success": True,
+        "user": {
+            "id": agent.id,
+            "name": agent.name,
+            "phone": agent.phone,
+            "login_id": agent.login_id,
+            "email": agent.email,
+            "department": agent.department,
+            "role": agent.role.value,
+            "status": agent.status.value,
+        },
+    }
+
+
+@router.put("/agents/{user_id}")
+async def update_agent(
+    user_id: int,
+    data: AgentUpdate,
+    current_user: User = Depends(require_permission("admin_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """更新客服信息"""
+    result = await db.execute(select(User).where(User.id == user_id))
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if agent.role != UserRole.AGENT:
+        raise HTTPException(status_code=400, detail="只能修改客服角色的用户")
+
+    # 检查手机号冲突
+    if data.phone and data.phone != agent.phone:
+        dup = await db.execute(select(User).where(User.phone == data.phone, User.id != user_id))
+        if dup.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="该手机号已被其他用户使用")
+        agent.phone = data.phone
+
+    if data.name is not None:
+        agent.name = data.name
+    if data.email is not None:
+        agent.email = data.email
+    if data.department is not None:
+        agent.department = data.department
+    if data.password:
+        agent.password_hash = hash_password(data.password)
+
+    agent.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"success": True}
+
+
+@router.delete("/agents/{user_id}")
+async def delete_agent(
+    user_id: int,
+    current_user: User = Depends(require_permission("admin_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """禁用客服（软删除）"""
+    result = await db.execute(select(User).where(User.id == user_id))
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if agent.role == UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=400, detail="不能禁用超级管理员")
+    if agent.role != UserRole.AGENT:
+        raise HTTPException(status_code=400, detail="只能禁用客服角色的用户")
+
+    agent.status = UserStatus.INACTIVE
+    agent.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"success": True, "status": "inactive"}

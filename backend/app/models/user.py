@@ -34,6 +34,8 @@ class User(Base):
     department = Column(String(128), nullable=True)
     status = Column(SQLEnum(UserStatus), default=UserStatus.ACTIVE, nullable=False)
     is_online = Column(Integer, default=0)  # 客服在线状态 0=离线 1=在线
+    login_fail_count = Column(Integer, default=0)  # 密码错误计数
+    locked_until = Column(DateTime, nullable=True)  # 锁定截止时间
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
