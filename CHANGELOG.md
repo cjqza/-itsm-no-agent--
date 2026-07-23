@@ -2,6 +2,13 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-23] 认证改造：四端前端登录页适配新接口（任务 B）
+- **变更**：四个前端 Login.vue（client/agent/ops/admin）统一去掉 el-tabs（飞书ID/用户名双 tab）与 quickLogin 测试账号快捷标签，改为「账号（login_id 或手机号）+ 密码」双输入框，调用 `store.login({ account, password })` 对齐后端 `POST /api/auth/login` 新契约；登录失败显示后端 detail 错误信息。admin 前端 api/index.js 移除 feishu_user_id 特判逻辑，store/user.js 移除字符串转 feishu_user_id 逻辑、fetchMe 补存 login_id/phone。
+- **原因**：后端认证体系已从 feishu_user_id 改为 login_id/手机号+密码（任务 A），前端需同步适配新接口契约。
+- **影响**：frontend-client/src/views/auth/Login.vue；frontend-agent/src/views/Login.vue；frontend-ops/src/views/Login.vue；frontend/src/views/auth/Login.vue；frontend/src/api/index.js；frontend/src/store/user.js。纯前端改造，后端无变更。
+- **提交**：`8e9efd4`
+- **测试**：67/67 全部通过，无回归。
+
 ## [2026-07-23] 认证改造：密码认证 + 账号申请审批 + admin_access 规则（P1 #4/#5）
 - **变更**：认证体系从"无密码登录 + 自动建号"升级为"密码认证 + 账号申请审批"。User 模型新增 login_id（专属ID号 U00001 递增）、password_hash（bcrypt）、PENDING 审批状态，phone 改为 unique index 作为登录键。登录接口改为 account（login_id 或 phone）+ password，移除自动建号逻辑。新增 POST /api/auth/register（账号申请，创建后 status=PENDING）。新增 GET/PUT /api/admin/account-requests（审批接口，approve 时自动分配 login_id）。admin_access 权限只能由 super_admin 修改（非 super_admin 尝试修改返回 403）。get_current_user 增加 status==ACTIVE 校验（PENDING/禁用用户无法访问）。seed_data 重建：admin/admin123 + agent U00001-U00005/123456 + user U00006-U00007/123456。新增 alembic 迁移（login_id、password_hash 列 + phone 唜一索引）。测试用例从 52 扩展到 67（新增 11 个注册/审批 + 3 个 admin_access 规则 + 1 个登录格式），67/67 全部通过。
 - **原因**：原认证体系无密码、自动建号，安全性不足且无法区分审批状态，需升级为企业级认证流程。
