@@ -46,8 +46,8 @@
 - [x] 已接单/处理中工单可催单
 
 ### 1.6 登录
-- [x] 飞书用户ID登录
-- [x] 用户名登录
+- [x] 账号密码登录（login_id 或手机号 + 密码）
+- [ ] 账号注册申请（待审批）
 
 ---
 
@@ -97,9 +97,8 @@
 - [x] 消息已读标记
 
 ### 2.5 登录
-- [x] 飞书用户ID登录
-- [x] 用户名登录
-- [x] 快捷登录（张三、李四、管理员）
+- [x] 账号密码登录（login_id 或手机号 + 密码）
+- [ ] 快捷登录适配新认证格式（待前端改造）
 
 ---
 
@@ -108,8 +107,10 @@
 ### 3.1 权限管理
 - [x] 用户列表（分页、搜索）
 - [x] 权限申请审批
+- [x] 账号注册申请审批（approve 分配 login_id）
 - [x] 启用/禁用用户
 - [x] 权限设置（itsm_access、ops_access、admin_access）
+- [x] admin_access 仅 super_admin 可修改
 
 ### 3.2 分类配置
 - [x] 管理单元 CRUD
@@ -118,9 +119,9 @@
 - [x] SLA 时长配置
 
 ### 3.3 登录
-- [x] 飞书用户ID登录
-- [x] 用户名登录
+- [x] 账号密码登录（login_id 或手机号 + 密码）
 - [x] 管理员权限校验（路由守卫）
+- [ ] 账号申请审批界面
 
 ---
 
@@ -148,17 +149,17 @@
 - [x] 导出功能（按当前筛选条件导出，含成功/失败提示）
 
 ### 4.5 登录
-- [x] 飞书用户ID登录
-- [x] 用户名登录
+- [x] 账号密码登录（login_id 或手机号 + 密码）
 
 ---
 
-## 五、后端 API（52 个端点）
+## 五、后端 API（55 个端点）
 
-### 5.1 认证（auth.py — 3 个）
+### 5.1 认证（auth.py — 4 个）
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | /api/auth/login | 登录（支持 feishu_user_id 或 name） |
+| POST | /api/auth/login | 登录（account: login_id/手机号 + password） |
+| POST | /api/auth/register | 账号注册申请（status=PENDING） |
 | GET | /api/auth/me | 获取当前用户信息 |
 | GET | /api/auth/permissions | 获取当前用户权限 |
 
@@ -198,7 +199,7 @@
 | GET | /api/chat/rooms/{room_id}/unread | 未读数 |
 | WS | /api/chat/ws/{room_id} | WebSocket 实时聊天 |
 
-### 5.4 后台管理（admin.py — 15 个）
+### 5.4 后台管理（admin.py — 17 个）
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | /api/admin/users | 用户列表 |
@@ -209,6 +210,8 @@
 | POST | /api/admin/permission-requests | 提交权限申请 |
 | PUT | /api/admin/permission-requests/{id} | 审批权限申请 |
 | GET | /api/admin/agents | 客服列表（itsm_access） |
+| GET | /api/admin/account-requests | 账号注册申请列表 |
+| PUT | /api/admin/account-requests/{user_id} | 审批账号申请（approve 分配 login_id） |
 | CRUD | /api/admin/categories/ | 管理单元 |
 | CRUD | /api/admin/business-modules/ | 业务模块 |
 | CRUD | /api/admin/properties/ | 性质 |
@@ -246,9 +249,13 @@
 
 ### 6.1 认证与权限
 - [x] JWT Token 认证
+- [x] 账号密码登录（login_id/手机号 + bcrypt 密码）
+- [x] 账号注册申请（status=PENDING，管理员审批后分配 login_id）
 - [x] 三级权限体系（itsm_access、ops_access、admin_access）
+- [x] admin_access 仅 super_admin 可修改（非 super_admin 返回 403）
 - [x] 管理员/超级管理员自动拥有所有权限
 - [x] 权限申请 → 管理员审批流程
+- [x] 用户状态校验（PENDING/禁用用户无法登录）
 - [x] 登录限流（10 次/分钟）
 
 ### 6.2 实时通信
@@ -276,13 +283,13 @@
 
 ## 七、测试账号
 
-| 角色 | feishu_user_id | 名称 |
-|------|----------------|------|
-| 管理员 | admin | 系统管理员 |
-| 客服 | agent_1 | 张三 |
-| 客服 | agent_2 | 李四 |
-| 客服 | agent_3 | 王五 |
-| 客服 | agent_4 | 赵六 |
-| 客服 | agent_5 | 钱七 |
-| 用户 | user1 | 刘一 |
-| 用户 | user2 | 陈二 |
+| 角色 | login_id | 密码 | 名称 |
+|------|----------|------|------|
+| 管理员 | admin | admin123 | 系统管理员 |
+| 客服 | U00001 | 123456 | 张三 |
+| 客服 | U00002 | 123456 | 李四 |
+| 客服 | U00003 | 123456 | 王五 |
+| 客服 | U00004 | 123456 | 赵六 |
+| 客服 | U00005 | 123456 | 钱七 |
+| 用户 | U00006 | 123456 | 刘一 |
+| 用户 | U00007 | 123456 | 陈二 |
