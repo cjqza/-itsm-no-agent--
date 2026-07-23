@@ -1,0 +1,68 @@
+from pydantic_settings import BaseSettings
+from functools import lru_cache
+
+
+class Settings(BaseSettings):
+    # Application
+    APP_NAME: str = "公司桌面IT服务台"
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = True
+    SECRET_KEY: str = "change-this-to-a-random-secret-key-in-production"
+
+    # Database (默认SQLite，无需安装MySQL)
+    DB_TYPE: str = "sqlite"  # sqlite 或 mysql
+    DB_HOST: str = "localhost"
+    DB_PORT: int = 3306
+    DB_USER: str = "root"
+    DB_PASSWORD: str = ""
+    DB_NAME: str = "it_ops"
+
+    @property
+    def DATABASE_URL(self) -> str:
+        if self.DB_TYPE == "sqlite":
+            return "sqlite+aiosqlite:///./it_ops.db"
+        return f"mysql+aiomysql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?charset=utf8mb4"
+
+    @property
+    def SYNC_DATABASE_URL(self) -> str:
+        if self.DB_TYPE == "sqlite":
+            return "sqlite:///./it_ops.db"
+        return f"mysql+pymysql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?charset=utf8mb4"
+
+    # Redis
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+
+    @property
+    def REDIS_URL(self) -> str:
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+
+    # Feishu
+    FEISHU_APP_ID: str = ""
+    FEISHU_APP_SECRET: str = ""
+    FEISHU_VERIFICATION_TOKEN: str = ""
+    FEISHU_ENCRYPT_KEY: str = ""
+    FEISHU_BOT_NAME: str = "IT服务台助手"
+
+    # JWT
+    JWT_SECRET_KEY: str = "jwt-secret-key-change-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 480  # 8 hours
+
+    # SLA Default (hours)
+    DEFAULT_SLA_HOURS: int = 4
+    SLA_WARNING_PERCENT: int = 50  # 超过50%变红色
+    ACCEPT_TIMEOUT_MINUTES: int = 5  # 5分钟未接单超时
+
+    # Frontend
+    FRONTEND_URL: str = "http://localhost:5173"
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()

@@ -1,0 +1,38 @@
+# ---- Python / Backend ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.env
+*.db
+*.sqlite
+*.sqlite3
+backend/it_ops.db
+
+# 后端运行时产物
+backend/logs/
+backend/uploads/
+
+# ---- Node / Frontend ----
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# ---- 日志 ----
+*.log
+logs/
+
+# ---- 编辑器 / 系统 ----
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# ---- 保留：Claude Code 配置随仓库走 ----
+!.claude/
