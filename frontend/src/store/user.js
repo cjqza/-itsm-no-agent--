@@ -7,6 +7,17 @@ export const useUserStore = defineStore('user', () => {
   const permissions = ref(JSON.parse(localStorage.getItem('permissions') || '{}'))
   const ws = ref(null)
   const wsCallbacks = ref([])
+  // WebSocket 心跳/重连管理
+  let heartbeatTimer = null
+  let reconnectTimer = null
+  let reconnectAttempts = 0
+  let manualClose = false
+  const MAX_RECONNECT = 10
+
+  function clearWsTimers() {
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null }
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+  }
 
   const isLoggedIn = computed(() => !!user.value)
   const userName = computed(() => user.value?.name || '')
@@ -51,6 +62,14 @@ export const useUserStore = defineStore('user', () => {
     const token = localStorage.getItem('token')
     if (!token) return
 
+    // 新建连接前清理旧连接与定时器，避免僵尸心跳/重复重连累积
+    manualClose = false
+    clearWsTimers()
+    if (ws.value) {
+      try { ws.value.onclose = null; ws.value.close() } catch (e) {}
+      ws.value = null
+    }
+
     try {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
       const wsUrl = `${protocol}//${location.host}/ws?token=${token}`
@@ -58,8 +77,10 @@ export const useUserStore = defineStore('user', () => {
 
       ws.value.onopen = () => {
         console.log('WebSocket已连接')
-        // 心跳
-        setInterval(() => {
+        reconnectAttempts = 0
+        // 心跳（句柄存入 heartbeatTimer 以便清理）
+        if (heartbeatTimer) clearInterval(heartbeatTimer)
+        heartbeatTimer = setInterval(() => {
           if (ws.value?.readyState === WebSocket.OPEN) {
             ws.value.send('ping')
           }
@@ -76,8 +97,18 @@ export const useUserStore = defineStore('user', () => {
       }
 
       ws.value.onclose = () => {
-        console.log('WebSocket断开，5秒后重连...')
-        setTimeout(connectWebSocket, 5000)
+        if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null }
+        // 主动 logout 触发的关闭不再重连
+        if (manualClose) return
+        if (reconnectAttempts < MAX_RECONNECT) {
+          const delay = Math.min(3000 * Math.pow(2, reconnectAttempts), 30000)
+          reconnectAttempts++
+          console.log(`WebSocket断开，${delay / 1000}秒后重连(${reconnectAttempts}/${MAX_RECONNECT})...`)
+          if (reconnectTimer) clearTimeout(reconnectTimer)
+          reconnectTimer = setTimeout(connectWebSocket, delay)
+        } else {
+          console.log('WebSocket重连已达上限，停止重连')
+        }
       }
     } catch (e) {}
   }
@@ -95,6 +126,10 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     localStorage.removeItem('permissions')
+    // 主动关闭：清理定时器并阻止 onclose 触发重连
+    manualClose = true
+    reconnectAttempts = 0
+    clearWsTimers()
     if (ws.value) {
       ws.value.close()
       ws.value = null

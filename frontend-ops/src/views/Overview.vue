@@ -75,6 +75,7 @@
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { opsApi } from '@/api'
+import { ElMessage } from 'element-plus'
 
 const days = ref(30)
 const overview = ref({})
@@ -165,7 +166,10 @@ async function handleExport() {
     a.href = url
     a.download = `tickets_report_${days.value}days.xlsx`
     a.click()
-  } catch (e) {}
+    ElMessage.success('导出成功')
+  } catch (e) {
+    ElMessage.error('导出失败：' + (e.response?.data?.detail || e.message || '未知错误'))
+  }
 }
 </script>
 
