@@ -29,11 +29,8 @@ export const useUserStore = defineStore('user', () => {
   const isAdmin = computed(() => ['admin', 'super_admin'].includes(user.value?.role))
 
   async function login(loginData) {
-    // loginData: { feishu_user_id } 或 { name } 或字符串
-    const payload = typeof loginData === 'string'
-      ? { feishu_user_id: loginData }
-      : loginData
-    const data = await authApi.login(payload)
+    // loginData: { account, password }
+    const data = await authApi.login(loginData)
     user.value = data.user
     permissions.value = data.permissions
     localStorage.setItem('token', data.token)
@@ -49,7 +46,7 @@ export const useUserStore = defineStore('user', () => {
   async function fetchMe() {
     try {
       const data = await authApi.getMe()
-      user.value = { id: data.id, name: data.name, role: data.role }
+      user.value = { id: data.id, name: data.name, role: data.role, login_id: data.login_id, phone: data.phone }
       permissions.value = data.permissions
       localStorage.setItem('user', JSON.stringify(user.value))
       localStorage.setItem('permissions', JSON.stringify(data.permissions))

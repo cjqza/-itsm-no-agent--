@@ -5,24 +5,16 @@
       <h1>ITSM服务工单管理</h1>
       <p>客服人员登录</p>
       <el-form :model="form" @submit.prevent="handleLogin" style="margin-top: 24px">
-        <el-tabs v-model="loginMode">
-          <el-tab-pane label="飞书ID登录" name="feishu">
-            <el-input v-model="form.feishu_user_id" placeholder="请输入飞书用户ID" size="large" />
-          </el-tab-pane>
-          <el-tab-pane label="用户名登录" name="name">
-            <el-input v-model="form.name" placeholder="请输入用户名" size="large" />
-          </el-tab-pane>
-        </el-tabs>
-        <el-button type="primary" size="large" :loading="loading" @click="handleLogin" style="width: 100%; margin-top: 16px">
+        <el-form-item>
+          <el-input v-model="form.account" placeholder="专属ID 或 手机号" size="large" prefix-icon="User" />
+        </el-form-item>
+        <el-form-item>
+          <el-input v-model="form.password" type="password" placeholder="请输入密码" size="large" prefix-icon="Lock" show-password />
+        </el-form-item>
+        <el-button type="primary" size="large" :loading="loading" @click="handleLogin" style="width: 100%; margin-top: 8px">
           登录
         </el-button>
       </el-form>
-      <div class="demo-hints">
-        <el-divider>测试账号</el-divider>
-        <el-tag size="small" @click="quickLogin('agent_1')">张三</el-tag>
-        <el-tag size="small" type="warning" @click="quickLogin('agent_2')">李四</el-tag>
-        <el-tag size="small" type="info" @click="quickLogin('admin')">管理员</el-tag>
-      </div>
     </div>
   </div>
 </template>
@@ -36,23 +28,19 @@ import { ElMessage } from 'element-plus'
 const router = useRouter()
 const store = useUserStore()
 const loading = ref(false)
-const loginMode = ref('feishu')
-const form = reactive({ feishu_user_id: '', name: '' })
+const form = reactive({ account: '', password: '' })
 
 async function handleLogin() {
-  if (loginMode.value === 'feishu' && !form.feishu_user_id) { ElMessage.warning('请输入飞书用户ID'); return }
-  if (loginMode.value === 'name' && !form.name) { ElMessage.warning('请输入用户名'); return }
+  if (!form.account) { ElMessage.warning('请输入账号'); return }
+  if (!form.password) { ElMessage.warning('请输入密码'); return }
   loading.value = true
   try {
-    const data = loginMode.value === 'feishu' ? { feishu_user_id: form.feishu_user_id } : { name: form.name }
-    await store.login(data)
+    await store.login({ account: form.account, password: form.password })
     ElMessage.success('登录成功')
     router.push('/')
-  } catch (e) { ElMessage.error('登录失败') }
+  } catch (e) { ElMessage.error(e.response?.data?.detail || '登录失败') }
   finally { loading.value = false }
 }
-
-function quickLogin(id) { form.feishu_user_id = id; loginMode.value = 'feishu'; handleLogin() }
 </script>
 
 <style scoped>
@@ -61,6 +49,4 @@ function quickLogin(id) { form.feishu_user_id = id; loginMode.value = 'feishu'; 
 .logo { font-size: 64px; margin-bottom: 16px; }
 h1 { color: #1a365d; margin-bottom: 8px; }
 p { color: #666; margin-bottom: 24px; }
-.demo-hints { margin-top: 16px; }
-.demo-hints .el-tag { cursor: pointer; margin: 0 4px; }
 </style>

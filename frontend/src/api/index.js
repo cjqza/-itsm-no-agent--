@@ -38,12 +38,7 @@ api.interceptors.response.use(
 
 // ============ 认证 ============
 export const authApi = {
-  login: (loginData) => {
-    if (typeof loginData === 'string') {
-      return api.post('/auth/login', { feishu_user_id: loginData })
-    }
-    return api.post('/auth/login', loginData)
-  },
+  login: (loginData) => api.post('/auth/login', loginData),
   getMe: () => api.get('/auth/me'),
 }
 
