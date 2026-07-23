@@ -4,6 +4,7 @@ from app.database import AsyncSessionLocal, init_db
 from app.models.user import User, UserRole, UserStatus
 from app.models.category import Category, BusinessModule, Property, Symptom, Cause, Solution
 from app.models.permission import Permission
+from app.models.template import Template
 from app.models.ticket import Ticket, TicketStatus, TicketLog, SLAStatus
 from app.utils.ticket_no import generate_ticket_no
 from app.utils.auth import hash_password
@@ -166,6 +167,18 @@ async def seed():
                 db.add(TicketLog(ticket_id=ticket.id, operator_id=t["agent"].id, action="status_change", old_value="processing", new_value="resolved", content="问题已解决"))
                 db.add(TicketLog(ticket_id=ticket.id, operator_id=t["user"].id, action="rated", new_value="5", content="非常满意"))
 
+        # 快捷回复模板
+        templates_data = [
+            {"title": "问候语", "content": "您好，我是IT客服{agent_name}，请问有什么可以帮您？", "category": "通用"},
+            {"title": "需要更多信息", "content": "为了更好地帮助您，请提供以下信息：\n1. 问题截图\n2. 错误提示信息\n3. 问题发生时间", "category": "通用"},
+            {"title": "远程协助", "content": "我将为您发起远程协助，请保持电脑联网状态。", "category": "技术支持"},
+            {"title": "问题已解决", "content": "您的问题已解决，请确认是否恢复正常。如有其他问题随时联系。", "category": "通用"},
+            {"title": "密码重置", "content": "您的密码已重置为：{temp_password}\n请登录后立即修改密码。", "category": "账号"},
+            {"title": "等待处理", "content": "您的问题正在处理中，预计{eta}内完成，请耐心等待。", "category": "通用"},
+        ]
+        for tpl in templates_data:
+            db.add(Template(title=tpl["title"], content=tpl["content"], category=tpl["category"]))
+
         await db.commit()
         print(f"[OK] Seed data created:")
         print(f"  Admin: login_id=admin / password={ADMIN_PASSWORD} (super_admin)")
@@ -173,6 +186,7 @@ async def seed():
         print(f"  Users: 刘一(U00006), 陈二(U00007) (password={DEFAULT_PASSWORD})")
         print(f"  Categories: {len(categories_data)}")
         print(f"  Sample tickets: {len(sample_tickets)}")
+        print(f"  Templates: {len(templates_data)}")
 
 
 if __name__ == "__main__":

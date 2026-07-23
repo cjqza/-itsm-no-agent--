@@ -343,7 +343,7 @@ async function sendMessage() {
             content: isImage ? `[图片] ${uploadResult.url}` : `[文件] ${file.name}\n${uploadResult.url}`,
             msg_type: isImage ? 'image' : 'text',
           })
-        } catch (e) { console.error('发送文件消息失败', e) }
+        } catch (e) { ElMessage.error('发送失败：' + (e.response?.data?.detail || e.message)) }
       }
     }
     pendingFile.value = null

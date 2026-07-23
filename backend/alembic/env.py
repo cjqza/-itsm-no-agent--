@@ -21,6 +21,7 @@ import app.models.permission  # noqa: E402,F401
 import app.models.category  # noqa: E402,F401
 import app.models.ticket  # noqa: E402,F401
 import app.models.chat  # noqa: E402,F401
+import app.models.template  # noqa: E402,F401
 
 config = context.config
 

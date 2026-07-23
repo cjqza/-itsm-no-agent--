@@ -1,11 +1,12 @@
 """聊天API"""
+import asyncio
+import json
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy import select, delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import Optional
-import json
 
 from app.database import get_db, AsyncSessionLocal
 from app.models.user import User
@@ -501,11 +502,14 @@ async def websocket_chat(websocket: WebSocket, room_id: int, token: str = ""):
 async def _broadcast_to_room(room_id: int, data: dict):
     """广播消息到聊天室内的所有用户"""
     connections = chat_connections.get(room_id, set())
-    dead = set()
-    for ws, uid in connections:
-        try:
-            await ws.send_json(data)
-        except Exception:
-            dead.add((ws, uid))
+    if not connections:
+        return
+    conns_list = list(connections)
+    results = await asyncio.gather(
+        *[ws.send_json(data) for ws, uid in conns_list],
+        return_exceptions=True,
+    )
+    # 清理断开的连接
+    dead = {conn for conn, r in zip(conns_list, results) if isinstance(r, Exception)}
     for item in dead:
         connections.discard(item)

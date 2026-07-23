@@ -5,6 +5,7 @@ from app.models.category import (
 )
 from app.models.permission import Permission, PermissionRequest
 from app.models.chat import ChatRoom, ChatMessage
+from app.models.template import Template
 
 __all__ = [
     "User",
@@ -20,4 +21,5 @@ __all__ = [
     "PermissionRequest",
     "ChatRoom",
     "ChatMessage",
+    "Template",
 ]

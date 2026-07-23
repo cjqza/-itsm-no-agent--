@@ -1,4 +1,5 @@
 """WebSocket管理器 - 实时推送工单更新"""
+import asyncio
 import json
 import logging
 from typing import Dict, Set
@@ -33,20 +34,23 @@ class ConnectionManager:
     async def send_to_user(self, user_id: int, message: dict):
         """发送消息给指定用户的所有连接"""
         connections = self._connections.get(user_id, set())
-        dead = set()
-        for ws in connections:
-            try:
-                await ws.send_json(message)
-            except Exception:
-                dead.add(ws)
+        if not connections:
+            return
+        results = await asyncio.gather(
+            *[ws.send_json(message) for ws in connections],
+            return_exceptions=True,
+        )
         # 清理断开的连接
+        dead = {ws for ws, r in zip(connections, results) if isinstance(r, Exception)}
         for ws in dead:
             connections.discard(ws)
 
     async def broadcast(self, message: dict):
         """广播消息给所有连接的用户"""
-        for user_id in list(self._connections.keys()):
-            await self.send_to_user(user_id, message)
+        await asyncio.gather(
+            *[self.send_to_user(uid, message) for uid in list(self._connections.keys())],
+            return_exceptions=True,
+        )
 
     async def notify_ticket_update(self, ticket_data: dict, target_user_ids: list = None):
         """通知工单更新"""
