@@ -17,6 +17,7 @@ from app.schemas.category import (
     BusinessModuleCreate, BusinessModuleUpdate, BusinessModuleOut,
     GenericItemCreate, GenericItemUpdate, GenericItemOut,
 )
+from app.models.audit_log import AuditLog
 from app.utils.auth import require_permission, get_current_user, generate_next_login_id, hash_password
 
 router = APIRouter(prefix="/api/admin", tags=["后台管理"])
@@ -29,7 +30,6 @@ class UserUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     department: Optional[str] = None
-    password: Optional[str] = None
 
 
 class UserStatusUpdate(BaseModel):
@@ -143,10 +143,15 @@ async def update_user(
         user.email = data.email
     if data.department is not None:
         user.department = data.department
-    if data.password:
-        user.password_hash = hash_password(data.password)
 
     user.updated_at = datetime.now(timezone.utc)
+    db.add(AuditLog(
+        operator_id=current_user.id,
+        action="update",
+        target_type="user",
+        target_id=user_id,
+        detail="修改用户信息",
+    ))
     await db.commit()
     return {"success": True}
 
@@ -177,6 +182,13 @@ async def update_user_status(
 
     user.status = UserStatus(data.status)
     user.updated_at = datetime.now(timezone.utc)
+    db.add(AuditLog(
+        operator_id=current_user.id,
+        action="update",
+        target_type="user",
+        target_id=user_id,
+        detail=f"状态改为 {data.status}",
+    ))
     await db.commit()
     return {"success": True, "status": user.status.value}
 
@@ -224,6 +236,13 @@ async def create_admin(
         admin_approved_by=current_user.id,
     )
     db.add(perm)
+    db.add(AuditLog(
+        operator_id=current_user.id,
+        action="create",
+        target_type="admin",
+        target_id=admin_user.id,
+        detail=f"创建管理员 {data.name}",
+    ))
     await db.commit()
 
     return {
@@ -318,6 +337,13 @@ async def update_permission(
         if admin_access:
             perm.admin_approved_by = current_user.id
 
+    db.add(AuditLog(
+        operator_id=current_user.id,
+        action="update",
+        target_type="permission",
+        target_id=user_id,
+        detail=f"itsm:{itsm_access}, ops:{ops_access}, admin:{admin_access}",
+    ))
     await db.commit()
     return {"success": True}
 
@@ -419,6 +445,13 @@ async def review_permission_request(
             perm.admin_access = True
             perm.admin_approved_by = current_user.id
 
+    db.add(AuditLog(
+        operator_id=current_user.id,
+        action=action,
+        target_type="permission_request",
+        target_id=request_id,
+        detail=f"审批权限申请 {req.request_type}",
+    ))
     await db.commit()
     return {"success": True}
 
@@ -584,6 +617,61 @@ cause_router = make_crud_router(Cause, GenericItemCreate, GenericItemUpdate, Gen
 solution_router = make_crud_router(Solution, GenericItemCreate, GenericItemUpdate, GenericItemOut, "solution", "解决方法", "/solutions")
 
 
+# ============ 审计日志 ============
+
+@router.get("/audit-logs")
+async def list_audit_logs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    action: Optional[str] = None,
+    target_type: Optional[str] = None,
+    current_user: User = Depends(require_permission("admin_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """审计日志列表（分页）"""
+    conditions = []
+    if action:
+        conditions.append(AuditLog.action == action)
+    if target_type:
+        conditions.append(AuditLog.target_type == target_type)
+
+    # 计数
+    count_query = select(func.count(AuditLog.id))
+    if conditions:
+        count_query = count_query.where(*conditions)
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # 数据：关联查询操作人姓名
+    query = (
+        select(AuditLog, User)
+        .join(User, AuditLog.operator_id == User.id)
+    )
+    if conditions:
+        query = query.where(*conditions)
+    query = query.order_by(AuditLog.id.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": log.id,
+                "operator_name": user.name,
+                "action": log.action,
+                "target_type": log.target_type,
+                "target_id": log.target_id,
+                "detail": log.detail,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log, user in rows
+        ],
+    }
+
+
 # ============ 客服管理 ============
 
 @router.get("/agents")
@@ -621,7 +709,6 @@ class AgentCreate(BaseModel):
 class AgentUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
-    password: Optional[str] = None
     email: Optional[str] = None
     department: Optional[str] = None
 
@@ -662,6 +749,13 @@ async def create_agent(
         ops_access=True,
     )
     db.add(perm)
+    db.add(AuditLog(
+        operator_id=current_user.id,
+        action="create",
+        target_type="agent",
+        target_id=agent.id,
+        detail=f"创建客服 {data.name}",
+    ))
     await db.commit()
 
     return {
@@ -707,8 +801,6 @@ async def update_agent(
         agent.email = data.email
     if data.department is not None:
         agent.department = data.department
-    if data.password:
-        agent.password_hash = hash_password(data.password)
 
     agent.updated_at = datetime.now(timezone.utc)
     await db.commit()
@@ -733,5 +825,12 @@ async def delete_agent(
 
     agent.status = UserStatus.INACTIVE
     agent.updated_at = datetime.now(timezone.utc)
+    db.add(AuditLog(
+        operator_id=current_user.id,
+        action="delete",
+        target_type="agent",
+        target_id=user_id,
+        detail="禁用客服",
+    ))
     await db.commit()
     return {"success": True, "status": "inactive"}

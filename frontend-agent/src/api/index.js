@@ -32,6 +32,7 @@ api.interceptors.response.use(
 export const authApi = {
   login: (data) => api.post('/auth/login', data),
   getMe: () => api.get('/auth/me'),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
 }
 
 export const ticketApi = {

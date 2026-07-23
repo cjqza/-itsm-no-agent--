@@ -318,59 +318,107 @@ onMounted(loadRooms)
 </script>
 
 <style scoped>
-.chat-rooms-page { display: flex; height: calc(100vh - 120px); background: white; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); overflow: hidden; }
+.chat-rooms-page {
+  display: flex;
+  height: calc(100vh - 120px);
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
 
 /* 左侧栏 */
-.rooms-sidebar { width: 300px; border-right: 1px solid #ebeef5; display: flex; flex-direction: column; }
-.rooms-header { padding: 16px 20px; border-bottom: 1px solid #ebeef5; }
-.rooms-header h3 { margin: 0; font-size: 16px; color: #333; }
+.rooms-sidebar { width: 300px; border-right: 1px solid #f0f0f0; display: flex; flex-direction: column; }
+.rooms-header { padding: 16px 20px; border-bottom: 1px solid #f0f0f0; background: #fafbfc; }
+.rooms-header h3 { margin: 0; font-size: 16px; color: #1e293b; font-weight: 600; }
 .rooms-list { flex: 1; overflow-y: auto; }
-.empty-rooms { padding: 40px 20px; text-align: center; color: #999; }
-.empty-hint { font-size: 12px; color: #bbb; margin-top: 8px; }
+.empty-rooms { padding: 48px 20px; text-align: center; color: #94a3b8; }
+.empty-hint { font-size: 12px; color: #cbd5e1; margin-top: 8px; }
 
-.room-item { display: flex; align-items: center; padding: 14px 20px; cursor: pointer; border-bottom: 1px solid #f5f5f5; transition: background 0.15s; gap: 12px; }
+.room-item {
+  display: flex;
+  align-items: center;
+  padding: 14px 20px;
+  cursor: pointer;
+  border-bottom: 1px solid #f8fafc;
+  transition: all 0.15s;
+  gap: 12px;
+}
 .room-item:hover { background: #f0f7ff; }
-.room-item.active { background: #e8f0fe; border-left: 3px solid #409eff; }
+.room-item.active {
+  background: #eff6ff;
+  border-left: 3px solid #3b82f6;
+}
 
 .room-info { flex: 1; min-width: 0; }
 .room-title { display: flex; align-items: center; gap: 8px; }
-.ticket-no { font-weight: 600; font-size: 13px; color: #333; }
+.ticket-no { font-weight: 600; font-size: 13px; color: #1e293b; }
 .unread-badge { margin-left: auto; }
-.room-subtitle { font-size: 12px; color: #666; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.room-last-msg { font-size: 11px; color: #999; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.room-subtitle { font-size: 12px; color: #64748b; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.room-last-msg { font-size: 11px; color: #94a3b8; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .room-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-.room-menu { cursor: pointer; color: #999; padding: 4px; border-radius: 4px; }
-.room-menu:hover { background: #e8e8e8; }
+.room-menu { cursor: pointer; color: #94a3b8; padding: 4px; border-radius: 6px; transition: all 0.15s; }
+.room-menu:hover { background: #e2e8f0; color: #64748b; }
 
 /* 右侧聊天区 */
 .chat-area { flex: 1; display: flex; flex-direction: column; }
-.chat-header { padding: 14px 20px; border-bottom: 1px solid #ebeef5; display: flex; align-items: center; gap: 12px; }
-.chat-title { font-weight: 600; font-size: 14px; color: #333; }
+.chat-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fafbfc;
+}
+.chat-title { font-weight: 600; font-size: 14px; color: #1e293b; }
 
-.chat-messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
 .msg { max-width: 70%; }
 .msg.self { align-self: flex-end; }
 .msg.other { align-self: flex-start; }
-.msg-sender { font-size: 12px; color: #999; margin-bottom: 4px; }
+.msg-sender { font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
 .msg.self .msg-sender { text-align: right; }
-.msg-content { padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.6; word-break: break-word; }
-.msg.self .msg-content { background: #409eff; color: white; border-bottom-right-radius: 4px; }
-.msg.other .msg-content { background: #f0f0f0; color: #333; border-bottom-left-radius: 4px; }
-.msg-system { background: transparent !important; color: #999 !important; text-align: center; font-size: 12px; padding: 4px 0 !important; }
-.msg-time { font-size: 11px; color: #bbb; margin-top: 4px; }
+.msg-content {
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+.msg.self .msg-content {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+.msg.other .msg-content {
+  background: #f1f5f9;
+  color: #334155;
+  border-bottom-left-radius: 4px;
+}
+.msg-system { background: transparent !important; color: #94a3b8 !important; text-align: center; font-size: 12px; padding: 4px 0 !important; }
+.msg-time { font-size: 11px; color: #cbd5e1; margin-top: 4px; }
 .msg.self .msg-time { text-align: right; }
 .msg-image { margin: 4px 0; }
 .msg-file { display: flex; align-items: center; gap: 8px; }
 .file-link { color: inherit; text-decoration: underline; }
 
 /* 输入区 */
-.chat-input-area { padding: 12px 20px; border-top: 1px solid #ebeef5; }
+.chat-input-area { padding: 12px 20px; border-top: 1px solid #f0f0f0; background: #fafbfc; }
 .input-row { display: flex; gap: 8px; align-items: center; }
 .pending-file { margin-top: 8px; }
-.chat-closed-hint { padding: 16px; text-align: center; color: #999; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.chat-closed-hint {
+  padding: 16px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
 
-.no-chat-selected { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #ccc; }
+.no-chat-selected { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #cbd5e1; }
 .no-chat-icon { font-size: 64px; margin-bottom: 16px; }
 .no-chat-selected p { font-size: 16px; }
 </style>

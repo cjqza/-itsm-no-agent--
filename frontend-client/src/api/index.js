@@ -32,6 +32,7 @@ export const authApi = {
   login: (data) => api.post('/auth/login', data),
   getMe: () => api.get('/auth/me'),
   register: (data) => api.post('/auth/register', data),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
 }
 
 export const ticketApi = {

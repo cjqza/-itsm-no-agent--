@@ -362,7 +362,6 @@ function statusText(s) {
 .unread-badge :deep(.el-badge__content) {
   font-size: 10px;
 }
-}
 
 .status-dot {
   width: 8px;

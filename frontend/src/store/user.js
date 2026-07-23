@@ -27,6 +27,7 @@ export const useUserStore = defineStore('user', () => {
   const hasOps = computed(() => permissions.value?.ops || false)
   const hasAdmin = computed(() => permissions.value?.admin || false)
   const isAdmin = computed(() => ['admin', 'super_admin'].includes(user.value?.role))
+  const isSuperAdmin = computed(() => user.value?.role === 'super_admin')
 
   async function login(loginData) {
     // loginData: { account, password }
@@ -135,7 +136,7 @@ export const useUserStore = defineStore('user', () => {
 
   return {
     user, permissions, isLoggedIn, userName, userRole,
-    hasItsm, hasOps, hasAdmin, isAdmin,
+    hasItsm, hasOps, hasAdmin, isAdmin, isSuperAdmin,
     login, fetchMe, logout, connectWebSocket, onWsMessage,
   }
 })

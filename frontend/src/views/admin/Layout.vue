@@ -1,25 +1,62 @@
 <template>
   <el-container class="layout-container">
     <el-aside width="220px" class="sidebar">
-      <div class="sidebar-header"><h2>⚙️ 后台管理</h2></div>
-      <el-menu :default-active="activeMenu" router background-color="#304156" text-color="#bfcbd9" active-text-color="#409eff">
+      <div class="sidebar-header">
+        <div class="logo-wrapper">
+          <div class="logo-icon">⚙️</div>
+        </div>
+        <div class="title">后台管理</div>
+        <div class="subtitle">系统配置与管理</div>
+      </div>
+      <el-menu
+        :default-active="activeMenu"
+        router
+        background-color="transparent"
+        text-color="rgba(255,255,255,0.65)"
+        active-text-color="#ffffff"
+      >
         <el-menu-item index="/admin"><el-icon><Key /></el-icon><span>权限管理</span></el-menu-item>
-        <el-menu-item index="/admin/account-requests"><el-icon><UserFilled /></el-icon><span>账号审批</span></el-menu-item>
         <el-menu-item index="/admin/categories"><el-icon><Grid /></el-icon><span>分类配置</span></el-menu-item>
         <el-menu-item index="/admin/settings"><el-icon><Setting /></el-icon><span>系统设置</span></el-menu-item>
       </el-menu>
       <div class="sidebar-footer">
         <div class="user-info">
-          <div class="avatar">{{ userStore.userName[0] }}</div>
-          <span class="name">{{ userStore.userName }}</span>
+          <div class="avatar">{{ userStore.userName?.[0] || 'A' }}</div>
+          <div class="user-detail">
+            <div class="name">{{ userStore.userName }}</div>
+            <div class="role">管理员</div>
+          </div>
         </div>
-        <el-button text class="logout-btn" @click="handleLogout">退出</el-button>
+        <el-button text class="logout-btn" @click="handleLogout">
+          <el-icon><SwitchButton /></el-icon>
+        </el-button>
       </div>
     </el-aside>
     <el-container>
       <el-header class="header">
-        <div><el-breadcrumb><el-breadcrumb-item :to="{ path: '/admin' }">后台管理</el-breadcrumb-item></el-breadcrumb></div>
-        <div><el-dropdown @command="handleCmd"><span class="user-info">{{ userStore.userName }} <el-icon><ArrowDown /></el-icon></span><template #dropdown><el-dropdown-menu><el-dropdown-item command="logout">退出登录</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div>
+        <div class="header-left">
+          <el-breadcrumb separator="/">
+            <el-breadcrumb-item :to="{ path: '/admin' }">后台管理</el-breadcrumb-item>
+            <el-breadcrumb-item v-if="route.name === 'Categories'">分类配置</el-breadcrumb-item>
+            <el-breadcrumb-item v-if="route.name === 'Settings'">系统设置</el-breadcrumb-item>
+          </el-breadcrumb>
+        </div>
+        <div class="header-right">
+          <el-dropdown @command="handleCmd">
+            <span class="header-user">
+              <div class="header-avatar">{{ userStore.userName?.[0] || 'A' }}</div>
+              <span>{{ userStore.userName }}</span>
+              <el-icon><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout">
+                  <el-icon><SwitchButton /></el-icon> 退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </el-header>
       <el-main class="main-content"><router-view /></el-main>
     </el-container>
@@ -30,6 +67,8 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
+import { Key, UserFilled, Grid, Setting, ArrowDown, SwitchButton } from '@element-plus/icons-vue'
+
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
@@ -40,18 +79,121 @@ function handleCmd(cmd) { if (cmd === 'logout') { userStore.logout(); router.pus
 
 <style scoped>
 .layout-container { height: 100vh; }
-.sidebar { background-color: #304156; display: flex; flex-direction: column; overflow: hidden; }
-.sidebar-header { padding: 20px; text-align: center; color: white; }
-.sidebar-header h2 { font-size: 18px; margin: 0; }
-.sidebar .el-menu { flex: 1; border-right: none; margin-top: 8px; }
-.sidebar .el-menu-item { height: 48px; line-height: 48px; margin: 4px 12px; border-radius: 8px; }
-.sidebar .el-menu-item:hover, .sidebar .el-menu-item.is-active { background: rgba(255,255,255,0.1) !important; }
-.sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: space-between; }
+
+.sidebar {
+  background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: none;
+}
+
+.sidebar-header {
+  padding: 24px 20px 20px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.logo-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(124, 58, 237, 0.5));
+  margin-bottom: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.logo-icon { font-size: 28px; }
+
+.title { font-size: 20px; font-weight: 700; color: white; letter-spacing: 1px; }
+.subtitle { font-size: 12px; color: rgba(255, 255, 255, 0.45); margin-top: 4px; }
+
+.sidebar .el-menu {
+  flex: 1;
+  border-right: none;
+  margin-top: 12px;
+  padding: 0 8px;
+}
+
+.sidebar .el-menu-item {
+  height: 44px;
+  line-height: 44px;
+  margin: 2px 0;
+  border-radius: 10px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.sidebar .el-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.sidebar .el-menu-item.is-active {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.4), rgba(124, 58, 237, 0.6)) !important;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.2);
+}
+
+.sidebar-footer {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .user-info { display: flex; align-items: center; gap: 10px; }
-.avatar { width: 32px; height: 32px; border-radius: 50%; background: #409eff; color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-.name { color: white; font-size: 14px; }
-.logout-btn { color: #bfcbd9 !important; font-size: 12px; }
-.logout-btn:hover { color: white !important; }
-.header { display: flex; justify-content: space-between; align-items: center; background: white; border-bottom: 1px solid #e6e6e6; padding: 0 20px; }
-.main-content { background: #f5f7fa; padding: 20px; overflow-y: auto; }
+.user-detail { display: flex; flex-direction: column; }
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+}
+.name { color: white; font-size: 14px; font-weight: 500; }
+.role { color: rgba(255, 255, 255, 0.45); font-size: 11px; margin-top: 1px; }
+.logout-btn { color: rgba(255, 255, 255, 0.45) !important; font-size: 14px; }
+.logout-btn:hover { color: rgba(255, 255, 255, 0.9) !important; }
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 0 24px;
+  height: 56px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+}
+
+.header-right { display: flex; align-items: center; }
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #334155;
+}
+.header-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.main-content { background: #f0f2f5; padding: 20px; overflow-y: auto; }
 </style>

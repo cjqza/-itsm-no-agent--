@@ -276,24 +276,56 @@ function statusText(s) {
 </script>
 
 <style scoped>
-.chat-page { height: calc(100vh - 108px); display: flex; flex-direction: column; background: white; border-radius: 12px; overflow: hidden; }
-.chat-header { display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-bottom: 1px solid #eee; background: #fafafa; }
+.chat-page {
+  height: calc(100vh - 108px);
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafbfc;
+}
+
 .ticket-info { flex: 1; }
-.ticket-no { font-weight: bold; color: #2563eb; margin-right: 8px; }
-.ticket-title { color: #333; }
+.ticket-no { font-weight: 700; color: #2563eb; margin-right: 8px; font-size: 14px; }
+.ticket-title { color: #334155; font-size: 14px; }
+
 .chat-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .messages { flex: 1; overflow-y: auto; padding: 20px; }
 .msg { margin-bottom: 12px; }
-.sys-msg { text-align: center; color: #999; font-size: 12px; padding: 8px; }
+.sys-msg { text-align: center; color: #94a3b8; font-size: 12px; padding: 8px; }
 .bubble { max-width: 70%; }
 .bubble.mine { margin-left: auto; }
 .bubble.other { margin-right: auto; }
-.sender { font-size: 12px; color: #999; margin-bottom: 4px; }
+.sender { font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
 .bubble.mine .sender { text-align: right; }
-.text { padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
-.bubble.mine .text { background: #2563eb; color: white; border-bottom-right-radius: 4px; }
-.bubble.other .text { background: #f5f5f5; color: #333; border-bottom-left-radius: 4px; }
-.time { font-size: 11px; color: #ccc; margin-top: 4px; }
+.text {
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+.bubble.mine .text {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+.bubble.other .text {
+  background: #f1f5f9;
+  color: #334155;
+  border-bottom-left-radius: 4px;
+}
+.time { font-size: 11px; color: #cbd5e1; margin-top: 4px; }
 .bubble.mine .time { text-align: right; }
 
 /* 图片消息 */
@@ -301,16 +333,37 @@ function statusText(s) {
 .bubble.mine .image-content { text-align: right; }
 
 /* 文件消息 */
-.file-content { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #f5f5f5; border-radius: 12px; }
+.file-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #f1f5f9;
+  border-radius: 12px;
+}
 .bubble.mine .file-content { background: #1d4ed8; }
 .file-info { display: flex; flex-direction: column; gap: 4px; }
-.file-name { font-size: 13px; font-weight: 500; color: #333; }
+.file-name { font-size: 13px; font-weight: 500; color: #334155; }
 .bubble.mine .file-name { color: white; }
 .download-link { font-size: 12px; color: #2563eb; text-decoration: none; }
 .bubble.mine .download-link { color: #93c5fd; }
 
-.input-area { display: flex; gap: 8px; padding: 16px 20px; border-top: 1px solid #eee; align-items: center; }
-.rating-section { padding: 20px; border-top: 1px solid #eee; }
-.rating-section h3 { margin-bottom: 12px; }
-.action-buttons { display: flex; gap: 8px; padding: 8px 20px; border-top: 1px solid #eee; }
+.input-area {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid #f0f0f0;
+  align-items: center;
+  background: #fafbfc;
+}
+
+.rating-section { padding: 20px; border-top: 1px solid #f0f0f0; }
+.rating-section h3 { margin-bottom: 12px; color: #1e293b; }
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  padding: 8px 20px;
+  border-top: 1px solid #f0f0f0;
+}
 </style>

@@ -180,7 +180,35 @@ function slaColor(s) { return { green: '#67c23a', yellow: '#e6a23c', red: '#f56c
 </script>
 
 <style scoped>
-h2 { margin-bottom: 16px; }
+.ticket-history { }
+h2 { margin-bottom: 16px; font-size: 18px; font-weight: 700; color: #1e293b; }
+
+.ticket-history :deep(.el-card) {
+  border-radius: 12px;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.ticket-history :deep(.el-card__header) {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafbfc;
+  border-radius: 12px 12px 0 0;
+}
+
 .toolbar { display: flex; justify-content: space-between; align-items: center; }
 .filters { display: flex; gap: 8px; }
+
+/* 表格样式 */
+.ticket-history :deep(.el-table th.el-table__cell) {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #475569;
+  font-size: 13px;
+}
+.ticket-history :deep(.el-table .el-table__row) {
+  cursor: pointer;
+}
+.ticket-history :deep(.el-table .el-table__row:hover > td) {
+  background: #f0f7ff !important;
+}
 </style>

@@ -41,6 +41,15 @@ class RegisterRequest(BaseModel):
     captcha_text: str = Field(..., min_length=1)
 
 
+class ResetPasswordRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    phone: str = Field(..., min_length=5, max_length=32, pattern=r"^[0-9+\-() ]{5,32}$")
+    captcha_id: str = Field(..., min_length=1)
+    captcha_text: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=6, max_length=128)
+    sms_code: Optional[str] = None  # 预留手机验证码字段，当前不校验
+
+
 class LoginResponse(BaseModel):
     token: str
     user: dict
@@ -192,6 +201,39 @@ async def register(req: RegisterRequest, request: Request, db: AsyncSession = De
         },
         "permissions": _build_permissions(user, perm),
     }
+
+
+@router.post("/reset-password")
+async def reset_password(req: ResetPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """重置密码（无需鉴权）"""
+    test_mode = _is_test_mode(request)
+
+    # 1. 验证码校验（优先检查，错误时明确提示）
+    if not verify_captcha(req.captcha_id, req.captcha_text, test_mode=test_mode):
+        raise HTTPException(status_code=400, detail="验证码错误")
+
+    # 2. 根据 name + phone 查找用户
+    phone = req.phone.strip()
+    name = req.name.strip()
+    result = await db.execute(
+        select(User).where(User.name == name, User.phone == phone)
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=400, detail="账号姓名错误")
+
+    # 3. 检查新密码不能与原密码相同
+    if user.password_hash and verify_password(req.new_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="新密码不能与原密码相同")
+
+    # 4. 更新密码
+    user.password_hash = hash_password(req.new_password)
+    user.login_fail_count = 0
+    user.locked_until = None
+    user.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return {"success": True, "message": "密码重置成功，请重新登录"}
 
 
 @router.get("/me")

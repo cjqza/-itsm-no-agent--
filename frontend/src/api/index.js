@@ -41,12 +41,18 @@ api.interceptors.response.use(
 export const authApi = {
   login: (loginData) => api.post('/auth/login', loginData),
   getMe: () => api.get('/auth/me'),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
 }
 
 // ============ 后台管理 ============
 export const adminApi = {
+  // 用户
+  getUsers: (params) => api.get('/admin/users', { params }),
+  updateUser: (userId, data) => api.put(`/admin/users/${userId}`, data),
+  updateUserStatus: (userId, data) => api.put(`/admin/users/${userId}/status`, data),
+
   // 权限
-  getPermissions: () => api.get('/admin/permissions'),
+  getPermissions: (params) => api.get('/admin/permissions', { params }),
   updatePermission: (userId, data) => api.put(`/admin/permissions/${userId}`, null, { params: data }),
   getPermissionRequests: (status) => api.get('/admin/permission-requests', { params: { status } }),
   createPermissionRequest: (data) => api.post('/admin/permission-requests', null, { params: data }),
@@ -83,7 +89,13 @@ export const adminApi = {
   updateSolution: (id, data) => api.put(`/admin/solutions/${id}`, data),
   deleteSolution: (id) => api.delete(`/admin/solutions/${id}`),
 
+  // 管理员
+  createAdmin: (data) => api.post('/admin/admins', data),
+
   getAgents: () => api.get('/admin/agents'),
+  createAgent: (data) => api.post('/admin/agents', data),
+  updateAgent: (userId, data) => api.put(`/admin/agents/${userId}`, data),
+  deleteAgent: (userId) => api.delete(`/admin/agents/${userId}`),
 
   // 账号审批
   getAccountRequests: (status) => api.get('/admin/account-requests', { params: { status } }),

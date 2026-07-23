@@ -357,46 +357,100 @@ function formatTime(t) { return t ? dayjs(t).format('YYYY-MM-DD HH:mm:ss') : '' 
 </script>
 
 <style scoped>
+/* 卡片通用样式 */
+.section {
+  border-radius: 12px;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.section :deep(.el-card__header) {
+  padding: 14px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafbfc;
+  border-radius: 12px 12px 0 0;
+  font-weight: 600;
+  font-size: 14px;
+  color: #1e293b;
+}
+
+.top-bar {
+  border-radius: 12px;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
 .top-bar .top-actions { display: flex; align-items: center; gap: 16px; }
-.ticket-title { flex: 1; }
-.ticket-title .no { color: #2563eb; font-weight: bold; margin-right: 8px; }
+.ticket-title { flex: 1; display: flex; align-items: center; gap: 8px; }
+.ticket-title .no { color: #2563eb; font-weight: 700; font-size: 15px; }
+.ticket-title span:last-child { font-size: 14px; color: #334155; font-weight: 500; }
 .actions { display: flex; gap: 8px; }
 
-.section { }
-
-.lifecycle { display: flex; justify-content: space-between; padding: 20px 0; }
-.step { display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; flex: 1; }
-.step::after { content: ''; position: absolute; top: 16px; left: 50%; width: 100%; height: 2px; background: #e5e7eb; z-index: 0; }
+/* 生命周期进度条 */
+.lifecycle { display: flex; justify-content: space-between; padding: 24px 16px; }
+.step { display: flex; flex-direction: column; align-items: center; gap: 10px; position: relative; flex: 1; }
+.step::after { content: ''; position: absolute; top: 18px; left: 50%; width: 100%; height: 2px; background: #e5e7eb; z-index: 0; }
 .step:last-child::after { display: none; }
-.step.done::after { background: #67c23a; }
-.step-icon { width: 32px; height: 32px; border-radius: 50%; background: #e5e7eb; color: #999; display: flex; align-items: center; justify-content: center; font-size: 14px; z-index: 1; }
-.step.done .step-icon { background: #67c23a; color: white; }
-.step.active .step-icon { background: #2563eb; color: white; }
-.step-label { font-size: 12px; color: #999; }
-.step.done .step-label, .step.active .step-label { color: #333; font-weight: bold; }
+.step.done::after { background: #22c55e; }
+.step-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 1;
+  transition: all 0.2s;
+}
+.step.done .step-icon { background: #22c55e; color: white; box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3); }
+.step.active .step-icon { background: #3b82f6; color: white; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); }
+.step-label { font-size: 12px; color: #94a3b8; font-weight: 500; }
+.step.done .step-label, .step.active .step-label { color: #1e293b; font-weight: 600; }
 
-.description { padding: 12px; background: #f8fafc; border-radius: 8px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
-.meta { margin-top: 12px; display: flex; gap: 24px; font-size: 13px; color: #666; }
+/* 问题描述 */
+.description {
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  color: #334155;
+}
+.meta { margin-top: 14px; display: flex; gap: 24px; font-size: 13px; color: #64748b; }
 
+/* SLA */
 .sla-header { display: flex; justify-content: space-between; align-items: center; }
-.sla-info { display: flex; gap: 24px; margin-top: 8px; font-size: 13px; color: #666; }
+.sla-info { display: flex; gap: 24px; margin-top: 10px; font-size: 13px; color: #64748b; }
 
+/* 操作按钮 */
 .op-buttons { display: flex; flex-direction: column; gap: 8px; }
+.op-buttons .el-button { border-radius: 8px; }
 
+/* 操作历史 */
 .log-item { display: flex; gap: 8px; }
-.log-user { font-weight: bold; color: #333; }
-.log-action { color: #666; }
+.log-user { font-weight: 600; color: #1e293b; font-size: 13px; }
+.log-action { color: #64748b; font-size: 13px; }
 
+/* 聊天区域 */
 .chat-card :deep(.el-card__body) { padding: 0; }
-.chat-messages { height: 300px; overflow-y: auto; padding: 12px; }
-.chat-msg { margin-bottom: 8px; }
-.sys-msg { text-align: center; color: #999; font-size: 12px; padding: 4px; }
+.chat-messages { height: 300px; overflow-y: auto; padding: 16px; }
+.chat-msg { margin-bottom: 12px; }
+.sys-msg { text-align: center; color: #94a3b8; font-size: 12px; padding: 8px 0; }
 .bubble { max-width: 80%; }
 .bubble.mine { margin-left: auto; }
-.sender { font-size: 11px; color: #999; margin-bottom: 2px; }
+.sender { font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
 .bubble.mine .sender { text-align: right; }
-.text { padding: 8px 12px; border-radius: 8px; font-size: 13px; }
-.bubble.mine .text { background: #2563eb; color: white; border-bottom-right-radius: 2px; }
-.bubble.other .text { background: #f5f5f5; color: #333; border-bottom-left-radius: 2px; }
-.chat-input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #eee; }
+.text {
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.bubble.mine .text { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; border-bottom-right-radius: 4px; }
+.bubble.other .text { background: #f1f5f9; color: #334155; border-bottom-left-radius: 4px; }
+.chat-input { display: flex; gap: 8px; padding: 14px; border-top: 1px solid #f0f0f0; background: #fafbfc; }
 </style>

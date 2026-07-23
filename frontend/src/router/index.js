@@ -27,11 +27,6 @@ const routes = [
         component: () => import('@/views/admin/Permissions.vue'),
       },
       {
-        path: 'account-requests',
-        name: 'AdminAccountRequests',
-        component: () => import('@/views/admin/AccountRequests.vue'),
-      },
-      {
         path: 'categories',
         name: 'AdminCategories',
         component: () => import('@/views/admin/Categories.vue'),
