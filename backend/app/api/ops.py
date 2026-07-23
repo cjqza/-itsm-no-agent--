@@ -260,18 +260,35 @@ async def statistics_trend(
 @router.get("/export")
 async def export_tickets(
     days: int = Query(30, ge=1, le=365),
+    status: Optional[str] = None,
+    category_id: Optional[int] = None,
+    keyword: Optional[str] = None,
     current_user: User = Depends(require_permission("ops_access")),
     db: AsyncSession = Depends(get_db),
 ):
-    """导出工单报表"""
+    """导出工单报表（支持与列表一致的筛选：状态/管理单元/关键字）"""
     from fastapi.responses import StreamingResponse
     from openpyxl import Workbook
+    from sqlalchemy import or_
     import io
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
+    conditions = [Ticket.created_at >= since]
+    if status:
+        conditions.append(Ticket.status == status)
+    if category_id:
+        conditions.append(Ticket.category_id == category_id)
+    if keyword:
+        conditions.append(
+            or_(
+                Ticket.ticket_no.like(f"%{keyword}%"),
+                Ticket.title.like(f"%{keyword}%"),
+            )
+        )
+
     result = await db.execute(
-        select(Ticket).where(Ticket.created_at >= since).order_by(Ticket.created_at.desc())
+        select(Ticket).where(*conditions).order_by(Ticket.created_at.desc())
     )
     tickets = result.scalars().all()
 

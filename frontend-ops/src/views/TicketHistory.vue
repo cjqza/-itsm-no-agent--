@@ -155,13 +155,21 @@ async function goToDetail(row) {
 
 async function handleExport() {
   try {
-    const blob = await opsApi.exportTickets(30)
+    const params = {}
+    if (filters.status) params.status = filters.status
+    if (filters.category_id) params.category_id = filters.category_id
+    if (keyword.value) params.keyword = keyword.value
+    const blob = await opsApi.exportTickets(params)
     const url = window.URL.createObjectURL(new Blob([blob]))
     const a = document.createElement('a')
     a.href = url
     a.download = 'tickets_report.xlsx'
     a.click()
-  } catch (e) {}
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch (e) {
+    ElMessage.error('导出失败：' + (e.response?.data?.detail || e.message || '未知错误'))
+  }
 }
 
 function formatTime(t) { return t ? dayjs(t).format('YYYY-MM-DD HH:mm') : '' }

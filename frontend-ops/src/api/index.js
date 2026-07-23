@@ -38,7 +38,7 @@ export const opsApi = {
   getRatings: (days = 30) => api.get('/ops/statistics/ratings', { params: { days } }),
   getSlaCompliance: (days = 30) => api.get('/ops/statistics/sla-compliance', { params: { days } }),
   getTrend: (days = 30) => api.get('/ops/statistics/trend', { params: { days } }),
-  exportTickets: (days = 30) => api.get('/ops/export', { params: { days }, responseType: 'blob' }),
+  exportTickets: (params = {}) => api.get('/ops/export', { params: { days: 30, ...params }, responseType: 'blob' }),
 }
 
 export const ticketApi = {
