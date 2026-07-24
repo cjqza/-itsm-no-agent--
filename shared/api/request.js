@@ -27,6 +27,7 @@ export function createApiClient({ baseURL = '/api', loginPath = '/login', timeou
       const status = error.response?.status
       const msg = error.response?.data?.detail || '请求失败'
       const isLoginRequest = error.config?.url?.includes('/auth/login')
+      const requireCaptcha = error.response?.headers?.['x-require-captcha'] === 'true'
 
       if (status === 401 && !isLoginRequest) {
         // 非登录接口的 401：token 过期，清除并跳转登录页
@@ -34,6 +35,8 @@ export function createApiClient({ baseURL = '/api', loginPath = '/login', timeou
         localStorage.removeItem('user')
         localStorage.removeItem('permissions')
         window.location.href = loginPath
+      } else if (isLoginRequest && requireCaptcha) {
+        // 登录接口需要验证码：不显示错误，由调用方弹出验证码对话框
       } else if (status === 401 && isLoginRequest) {
         // 登录接口的 401：账号或密码错误，不跳转，只返回错误
         // 不显示 ElMessage，由调用方处理
