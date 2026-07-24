@@ -15,6 +15,7 @@ export const adminApi = {
   getUsers: (params) => api.get('/admin/users', { params }),
   updateUser: (userId, data) => api.put(`/admin/users/${userId}`, data),
   updateUserStatus: (userId, data) => api.put(`/admin/users/${userId}/status`, data),
+  unlockUser: (userId) => api.put(`/admin/users/${userId}/unlock`),
 
   // 权限
   getPermissions: (params) => api.get('/admin/permissions', { params }),

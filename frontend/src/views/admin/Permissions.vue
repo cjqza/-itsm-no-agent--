@@ -57,11 +57,16 @@
             <el-table-column prop="phone" label="手机号" width="130" />
             <el-table-column prop="email" label="邮箱" min-width="150" show-overflow-tooltip />
             <el-table-column prop="department" label="部门" width="120" show-overflow-tooltip />
-            <el-table-column prop="status" label="状态" width="80" align="center">
+            <el-table-column prop="status" label="状态" width="100" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small" effect="light" round>
-                  {{ row.status === 'active' ? '正常' : '已禁用' }}
-                </el-tag>
+                <div>
+                  <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small" effect="light" round>
+                    {{ row.status === 'active' ? '正常' : '已禁用' }}
+                  </el-tag>
+                  <el-tag v-if="row.locked_until" type="warning" size="small" effect="light" round style="margin-top: 4px;">
+                    已锁定
+                  </el-tag>
+                </div>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="200" align="center">
@@ -76,6 +81,13 @@
                   >
                     {{ row.status === 'active' ? '禁用' : '启用' }}
                   </el-button>
+                  <el-button
+                    v-if="row.locked_until"
+                    type="warning"
+                    size="small"
+                    link
+                    @click="handleUnlock(row)"
+                  >解锁</el-button>
                 </template>
                 <template v-else-if="row.role === 'admin' || row.role === 'super_admin'">
                   <el-button
@@ -511,6 +523,23 @@ async function handleToggleStatus(row) {
       await adminApi.updateUserStatus(row.id, { status: 'active' })
     }
     ElMessage.success(`已${action}`)
+    await loadUsers()
+  } catch (e) {
+    if (e !== 'cancel') {
+      // error already handled by interceptor
+    }
+  }
+}
+
+async function handleUnlock(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要解锁账号「${row.user_name}」吗？`,
+      '操作确认',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    )
+    await adminApi.unlockUser(row.user_id)
+    ElMessage.success('账号已解锁')
     await loadUsers()
   } catch (e) {
     if (e !== 'cancel') {

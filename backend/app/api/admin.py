@@ -193,6 +193,35 @@ async def update_user_status(
     return {"success": True, "status": user.status.value}
 
 
+@router.put("/users/{user_id}/unlock")
+async def unlock_user(
+    user_id: int,
+    current_user: User = Depends(require_permission("admin_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """手动解锁被锁定的账号"""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    if user.login_fail_count == 0 and not user.locked_until:
+        raise HTTPException(status_code=400, detail="该账号未被锁定")
+
+    user.login_fail_count = 0
+    user.locked_until = None
+    user.updated_at = datetime.now(timezone.utc)
+    db.add(AuditLog(
+        operator_id=current_user.id,
+        action="unlock",
+        target_type="user",
+        target_id=user_id,
+        detail="手动解锁账号",
+    ))
+    await db.commit()
+    return {"success": True, "message": "账号已解锁"}
+
+
 @router.post("/admins")
 async def create_admin(
     data: AdminCreate,
@@ -288,6 +317,9 @@ async def list_permissions(
             "login_id": user.login_id,
             "phone": user.phone,
             "email": user.email,
+            "status": user.status.value,
+            "login_fail_count": user.login_fail_count or 0,
+            "locked_until": user.locked_until.isoformat() if user.locked_until else None,
             "itsm_access": perm.itsm_access,
             "ops_access": perm.ops_access,
             "admin_access": perm.admin_access,

@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/auth", tags=["认证"])
 
 # 锁定配置
 MAX_LOGIN_FAIL = 5
-LOCK_MINUTES = 15
+LOCK_MINUTES = 10
 CAPTCHA_AFTER_FAILS = 3
 
 
