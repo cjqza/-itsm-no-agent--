@@ -78,6 +78,7 @@ import { useUserStore } from '@/store/user'
 import { ticketApi, chatApi, uploadApi } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Paperclip, Document } from '@element-plus/icons-vue'
+import { statusType, statusText } from '@shared/utils/status'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -268,12 +269,6 @@ function scrollToBottom() {
 }
 
 function formatTime(t) { return t ? dayjs(t).format('HH:mm') : '' }
-function statusType(s) {
-  return { pending: 'info', accepted: '', processing: 'warning', resolved_pending_review: 'success', resolved: 'success' }[s] || 'info'
-}
-function statusText(s) {
-  return { pending: '待接单', accepted: '已接单', processing: '处理中', resolved_pending_review: '待评价', resolved: '已解决' }[s] || s
-}
 </script>
 
 <style scoped>

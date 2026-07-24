@@ -134,7 +134,8 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ticketApi } from '@/api'
 import { ElMessage } from 'element-plus'
-import dayjs from 'dayjs'
+import { slaColor, statusTagType, statusText } from '@shared/utils/status'
+import { formatShortTime as formatTime } from '@shared/utils/format'
 
 const router = useRouter()
 const store = useUserStore()
@@ -192,10 +193,6 @@ function getSlaPercent(t) {
   return Math.min(100, Math.round(elapsed / total * 100))
 }
 
-function slaColor(s) { return { green: '#67c23a', yellow: '#e6a23c', red: '#f56c6c', black: '#333' }[s] || '#999' }
-function statusTagType(s) { return { pending: 'info', accepted: '', processing: 'warning', resolved_pending_review: 'success', resolved: 'success' }[s] || 'info' }
-function statusText(s) { return { pending: '待接单', accepted: '已接单', processing: '处理中', resolved_pending_review: '待评价', resolved: '已解决' }[s] || s }
-function formatTime(t) { return t ? dayjs(t).format('MM-DD HH:mm') : '' }
 </script>
 
 <style scoped>

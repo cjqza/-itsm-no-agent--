@@ -54,7 +54,8 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ticketApi } from '@/api'
 import { Refresh } from '@element-plus/icons-vue'
-import dayjs from 'dayjs'
+import { statusType, statusText } from '@shared/utils/status'
+import { formatTime } from '@shared/utils/format'
 
 const router = useRouter()
 const store = useUserStore()
@@ -72,13 +73,6 @@ async function loadTickets() {
 }
 
 function goToChat(row) { router.push(`/chat/${row.id}`) }
-function statusType(s) {
-  return { pending: 'info', accepted: '', processing: 'warning', resolved_pending_review: 'success', resolved: 'success' }[s] || 'info'
-}
-function statusText(s) {
-  return { pending: '待接单', accepted: '已接单', processing: '处理中', resolved_pending_review: '待评价', resolved: '已解决' }[s] || s
-}
-function formatTime(t) { return t ? dayjs(t).format('YYYY-MM-DD HH:mm') : '' }
 </script>
 
 <style scoped>

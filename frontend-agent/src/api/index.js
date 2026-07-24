@@ -1,33 +1,6 @@
-import axios from 'axios'
-import { ElMessage } from 'element-plus'
-import router from '@/router'
+import { createApiClient } from '@shared/api/request'
 
-const api = axios.create({ baseURL: '/api', timeout: 30000 })
-
-api.interceptors.request.use(config => {
-  const token = localStorage.getItem('token')
-  if (token) config.headers.Authorization = `Bearer ${token}`
-  return config
-})
-
-api.interceptors.response.use(
-  response => response.data,
-  error => {
-    const status = error.response?.status
-    const msg = error.response?.data?.detail || '请求失败'
-    console.error(`[API Error] ${status} ${error.config?.method?.toUpperCase()} ${error.config?.url}: ${msg}`)
-    if (status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      localStorage.removeItem('permissions')
-      router.push('/login')
-      ElMessage.error('登录已过期')
-    } else {
-      ElMessage.error(msg)
-    }
-    return Promise.reject(error)
-  }
-)
+const api = createApiClient()
 
 export const authApi = {
   login: (data) => api.post('/auth/login', data),

@@ -104,6 +104,7 @@ import { useUserStore } from '@/store/user'
 import { ticketApi, chatApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import { ChatDotRound } from '@element-plus/icons-vue'
+import { statusTagType, statusText } from '@shared/utils/status'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -290,13 +291,6 @@ function statusColor(s) {
   return { accepted: '#409eff', processing: '#e6a23c', resolved_pending_review: '#67c23a' }[s] || '#999'
 }
 
-function statusTagType(s) {
-  return { pending: 'info', accepted: '', processing: 'warning', resolved_pending_review: 'success', resolved: 'success' }[s] || 'info'
-}
-
-function statusText(s) {
-  return { pending: '待接单', accepted: '已接单', processing: '处理中', resolved_pending_review: '待评价', resolved: '已解决' }[s] || s
-}
 </script>
 
 <style scoped>

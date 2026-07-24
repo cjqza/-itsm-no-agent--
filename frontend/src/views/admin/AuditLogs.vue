@@ -79,7 +79,7 @@
 import { ref, onMounted } from 'vue'
 import { adminApi } from '@/api'
 import { ElMessage } from 'element-plus'
-import dayjs from 'dayjs'
+import { formatTime } from '@shared/utils/format'
 
 const logs = ref([])
 const loading = ref(false)
@@ -131,7 +131,6 @@ function targetTypeText(type) {
   return { user: '用户', permission: '权限', agent: '客服', admin: '管理员', category: '分类', template: '模板' }[type] || type
 }
 
-function formatTime(t) { return t ? dayjs(t).format('YYYY-MM-DD HH:mm:ss') : '' }
 </script>
 
 <style scoped>

@@ -111,7 +111,7 @@
         <el-card class="section" style="margin-top:16px">
           <template #header><span>操作历史</span></template>
           <el-timeline>
-            <el-timeline-item v-for="log in logs" :key="log.id" :timestamp="formatTime(log.created_at)" placement="top">
+            <el-timeline-item v-for="log in logs" :key="log.id" :timestamp="formatTime(log.created_at, 'YYYY-MM-DD HH:mm:ss')" placement="top">
               <div class="log-item">
                 <span class="log-user">{{ log.operator_name || '系统' }}</span>
                 <span class="log-action">{{ log.content || log.action }}</span>
@@ -161,7 +161,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ticketApi, chatApi, adminApi } from '@/api'
 import { ElMessage } from 'element-plus'
-import dayjs from 'dayjs'
+import { priorityType, slaColor, slaText, slaTagType } from '@shared/utils/status'
+import { formatTime } from '@shared/utils/format'
 
 const router = useRouter()
 const route = useRoute()
@@ -350,11 +351,6 @@ async function sendChat() {
 
 function scrollToBottom() { nextTick(() => { if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight }) }
 
-function priorityType(p) { return { P1: 'danger', P2: 'warning', P3: '', P4: 'info' }[p] || '' }
-function slaColor(s) { return { green: '#67c23a', yellow: '#e6a23c', red: '#f56c6c', black: '#333' }[s] || '#999' }
-function slaText(s) { return { green: '正常', yellow: '预警', red: '警告', black: '超时' }[s] || '' }
-function slaTagType(s) { return { green: 'success', yellow: 'warning', red: 'danger', black: 'info' }[s] || 'info' }
-function formatTime(t) { return t ? dayjs(t).format('YYYY-MM-DD HH:mm:ss') : '' }
 </script>
 
 <style scoped>

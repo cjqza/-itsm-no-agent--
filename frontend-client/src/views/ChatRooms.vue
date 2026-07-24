@@ -110,6 +110,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Paperclip, Document, MoreFilled, Delete, CircleClose } from '@element-plus/icons-vue'
 import { chatApi, uploadApi } from '@/api'
 import { useUserStore } from '@/store/user'
+import { statusType, statusText } from '@shared/utils/status'
 
 const store = useUserStore()
 const userId = computed(() => store.userId)
@@ -280,16 +281,6 @@ function scrollToBottom() {
   nextTick(() => {
     if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight
   })
-}
-
-function statusType(status) {
-  const map = { pending: 'info', accepted: '', processing: 'warning', resolved_pending_review: 'success', resolved: 'success', closed: 'info' }
-  return map[status] || 'info'
-}
-
-function statusText(status) {
-  const map = { pending: '待接单', accepted: '已接单', processing: '处理中', resolved_pending_review: '待评价', resolved: '已解决', closed: '已关闭' }
-  return map[status] || status
 }
 
 function formatTime(iso) {
