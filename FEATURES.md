@@ -314,6 +314,11 @@
 - [x] 四端 vite.config.js 注册 @shared 路径别名
 - [x] 四端 api/index.js 改用 createApiClient（消除 100 行重复拦截器）
 - [x] 9 个组件删除本地重复函数改用 shared 导入（消除 150 行重复）
+- [x] shared/components/BaseLogin.vue（四端登录页统一组件，300 行→65 行）
+- [x] shared/components/ChatMessage.vue（三端聊天页消息渲染统一组件）
+- [x] shared/components/ChatInput.vue（三端聊天页输入框统一组件）
+- [x] shared/composables/useWebSocket.js（三端 WS 连接统一为 composable，含重连+心跳）
+- [x] shared/stores/user.js（四端 store 基础提取：token/user/permissions/login/logout/fetchMe）
 
 ### 6.5 其他
 - [x] API 限流（登录 5/min，注册 3/hour，验证码 10/min，其他 120/min）
@@ -333,6 +338,11 @@
 - [x] Pydantic 输入校验（rating 1-5、title 200 字、description 5000 字、模板 title/content 长度限制）
 - [x] 聊天消息分页加载（get_messages 返回 {total, page, page_size, items}）
 - [x] 移动端响应式适配（Login/Dashboard/Layout/Overview，@media 768px/480px 断点）
+- [x] Redis 缓存替换（限流 sorted set / Permission hash 60s TTL / 验证码 string GETDEL，均 fallback 内存）
+- [x] Docker 化（backend Dockerfile + 4 前端 Dockerfile + nginx.conf + docker-compose.yml）
+- [x] CI/CD 流水线（.github/workflows/ci.yml，backend 测试 + 4 前端构建矩阵）
+- [x] 前端单元测试（4 端 Vitest 配置 + 示例测试 status.test.js）
+- [x] ITSM 暗色主题切换（Sun/Moon 按钮 + localStorage 持久化）
 
 ---
 
