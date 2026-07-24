@@ -39,29 +39,6 @@
             @keyup.enter="handleLogin"
           />
         </el-form-item>
-        <el-form-item>
-          <div style="display: flex; gap: 8px; width: 100%">
-            <el-input
-              v-model="form.captcha_text"
-              placeholder="请输入验证码"
-              size="large"
-              @keyup.enter="handleLogin"
-              style="flex: 1"
-            />
-            <img
-              v-if="loginCaptchaImg"
-              :src="loginCaptchaImg"
-              @click="fetchLoginCaptcha"
-              style="height: 40px; cursor: pointer; border-radius: 4px; border: 1px solid #e2e8f0"
-              alt="验证码"
-            />
-            <span
-              v-else
-              @click="fetchLoginCaptcha"
-              style="cursor: pointer; color: #64748b; white-space: nowrap; line-height: 40px"
-            >获取验证码</span>
-          </div>
-        </el-form-item>
         <el-button
           type="primary"
           size="large"
@@ -121,6 +98,42 @@
       </template>
     </el-dialog>
 
+    <!-- 验证码对话框 -->
+    <el-dialog v-model="showCaptchaDialog" title="安全验证" width="360px" :close-on-click-modal="false" class="captcha-dialog">
+      <div style="text-align: center; margin-bottom: 16px; color: #666; font-size: 14px;">
+        登录失败次数较多，请输入验证码继续
+      </div>
+      <el-form :model="captchaForm" ref="captchaFormRef" @submit.prevent="handleCaptchaSubmit">
+        <el-form-item>
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-input
+              v-model="captchaForm.captcha_text"
+              placeholder="请输入验证码"
+              size="large"
+              @keyup.enter="handleCaptchaSubmit"
+              style="flex: 1"
+            />
+            <img
+              v-if="loginCaptchaImg"
+              :src="loginCaptchaImg"
+              @click="fetchLoginCaptcha"
+              style="height: 40px; cursor: pointer; border-radius: 4px; border: 1px solid #e2e8f0"
+              alt="验证码"
+            />
+            <span
+              v-else
+              @click="fetchLoginCaptcha"
+              style="cursor: pointer; color: #64748b; white-space: nowrap; line-height: 40px"
+            >获取验证码</span>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCaptchaDialog = false">取消</el-button>
+        <el-button type="primary" :loading="loginLoading" @click="handleCaptchaSubmit">确认登录</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 忘记密码对话框 -->
     <el-dialog v-model="showResetDialog" title="重置密码" width="420px" :close-on-click-modal="false" class="reset-dialog">
       <el-form :model="resetForm" :rules="resetRules" ref="resetFormRef" label-width="80px">
@@ -176,9 +189,11 @@ const emit = defineEmits(['login-success', 'register-success', 'reset-success'])
 // --- 登录 ---
 const loginLoading = ref(false)
 const loginFormRef = ref(null)
-const form = reactive({ account: '', password: '', captcha_text: '' })
+const form = reactive({ account: '', password: '' })
 
-// 登录验证码
+// 验证码对话框
+const showCaptchaDialog = ref(false)
+const captchaForm = reactive({ captcha_text: '' })
 const loginCaptchaImg = ref('')
 const loginCaptchaId = ref('')
 
@@ -190,27 +205,51 @@ async function fetchLoginCaptcha() {
   } catch (e) { console.error('获取验证码失败', e) }
 }
 
-// 初始化时加载验证码
-fetchLoginCaptcha()
-
 async function handleLogin() {
   if (!form.account) { ElMessage.warning('请输入账号'); return }
   if (!form.password) { ElMessage.warning('请输入密码'); return }
-  if (!form.captcha_text) { ElMessage.warning('请输入验证码'); return }
+  loginLoading.value = true
+  try {
+    await props.loginHandler({
+      account: form.account,
+      password: form.password,
+    })
+    ElMessage.success('登录成功')
+    emit('login-success')
+  } catch (e) {
+    const status = e.response?.status
+    const requireCaptcha = e.response?.headers?.['x-require-captcha'] === 'true'
+
+    // 如果需要验证码，弹出验证码对话框
+    if (status === 401 && requireCaptcha) {
+      await fetchLoginCaptcha()
+      captchaForm.captcha_text = ''
+      showCaptchaDialog.value = true
+    } else {
+      ElMessage.error(e.response?.data?.detail || '登录失败')
+    }
+  } finally {
+    loginLoading.value = false
+  }
+}
+
+async function handleCaptchaSubmit() {
+  if (!captchaForm.captcha_text) { ElMessage.warning('请输入验证码'); return }
   loginLoading.value = true
   try {
     await props.loginHandler({
       account: form.account,
       password: form.password,
       captcha_id: loginCaptchaId.value,
-      captcha_text: form.captcha_text,
+      captcha_text: captchaForm.captcha_text,
     })
     ElMessage.success('登录成功')
+    showCaptchaDialog.value = false
     emit('login-success')
   } catch (e) {
     // 刷新验证码
-    fetchLoginCaptcha()
-    form.captcha_text = ''
+    await fetchLoginCaptcha()
+    captchaForm.captcha_text = ''
     ElMessage.error(e.response?.data?.detail || '登录失败')
   } finally {
     loginLoading.value = false

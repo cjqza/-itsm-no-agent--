@@ -58,8 +58,8 @@ def _record_ip_fail(client_ip: str):
 class LoginRequest(BaseModel):
     account: str = Field(..., min_length=1, max_length=64, description="专属ID或电话")
     password: str = Field(..., min_length=1, max_length=128)
-    captcha_id: str = Field(..., min_length=1, description="验证码ID")
-    captcha_text: str = Field(..., min_length=1, max_length=10, description="验证码")
+    captcha_id: Optional[str] = None
+    captcha_text: Optional[str] = None
 
 
 class RegisterRequest(BaseModel):
@@ -104,7 +104,7 @@ def _is_test_mode(request: Request) -> bool:
 
 @router.post("/login", response_model=LoginResponse)
 async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
-    """登录 - 账号（专属ID或电话）+ 密码 + 验证码（始终需要）"""
+    """登录 - 账号（专属ID或电话）+ 密码；3次失败后需要验证码"""
     account = req.account.strip()
     test_mode = _is_test_mode(request)
     client_ip = request.client.host if request.client else "unknown"
@@ -116,24 +116,45 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
             detail="登录尝试过于频繁，请稍后再试",
         )
 
-    # 第一步：验证码校验（始终需要，先于密码校验）
-    if not req.captcha_id:
-        raise HTTPException(status_code=400, detail="请输入验证码")
-    if not test_mode and not req.captcha_text:
-        raise HTTPException(status_code=400, detail="请输入验证码")
-    if not await verify_captcha(req.captcha_id, req.captcha_text, test_mode=test_mode):
-        # 验证码错误，记录 IP 失败，不检查密码
-        if not test_mode:
-            _record_ip_fail(client_ip)
-        raise HTTPException(status_code=400, detail="验证码错误或已过期")
-
-    # 第二步：验证码正确，按 login_id 或 phone 查找用户
+    # 按 login_id 或 phone 查找用户
     result = await db.execute(
         select(User).where((User.login_id == account) | (User.phone == account))
     )
     user = result.scalar_one_or_none()
 
-    # 第三步：校验密码
+    # 检查账号锁定（兼容 SQLite 时区问题）
+    if user and user.locked_until:
+        locked_until = user.locked_until
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        if locked_until > now:
+            raise HTTPException(
+                status_code=423,
+                detail="账号已锁定，请联系管理员解锁",
+            )
+
+    # 验证码检查（失败 >= 3 次后需要验证码）
+    if user and user.login_fail_count >= CAPTCHA_AFTER_FAILS:
+        if not req.captcha_id:
+            raise HTTPException(
+                status_code=400,
+                detail="请输入验证码",
+                headers={"X-Require-Captcha": "true"},
+            )
+        if not test_mode and not req.captcha_text:
+            raise HTTPException(
+                status_code=400,
+                detail="请输入验证码",
+                headers={"X-Require-Captcha": "true"},
+            )
+        if not await verify_captcha(req.captcha_id, req.captcha_text, test_mode=test_mode):
+            # 验证码错误，记录 IP 失败，不检查密码
+            if not test_mode:
+                _record_ip_fail(client_ip)
+            raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    # 校验密码
     if user is None or not verify_password(req.password, user.password_hash):
         # 记录 IP 失败
         if not test_mode:
@@ -146,21 +167,16 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
                 user.locked_until = datetime.now(timezone.utc) + timedelta(days=365*10)  # 长期锁定，需管理员解锁
             await db.commit()
 
+            # 返回是否需要验证码
+            if user.login_fail_count >= CAPTCHA_AFTER_FAILS:
+                raise HTTPException(
+                    status_code=401,
+                    detail="账号或密码错误",
+                    headers={"X-Require-Captcha": "true"},
+                )
         raise HTTPException(status_code=401, detail="账号或密码错误")
 
-    # 第四步：检查账号锁定（兼容 SQLite 时区问题）
-    if user.locked_until:
-        locked_until = user.locked_until
-        if locked_until.tzinfo is None:
-            locked_until = locked_until.replace(tzinfo=timezone.utc)
-        now = datetime.now(timezone.utc)
-        if locked_until > now:
-            raise HTTPException(
-                status_code=423,
-                detail="账号已锁定，请联系管理员解锁",
-            )
-
-    # 第五步：非激活状态不能登录
+    # 非激活状态不能登录
     if user.status != UserStatus.ACTIVE:
         raise HTTPException(status_code=401, detail="账号或密码错误")
 
