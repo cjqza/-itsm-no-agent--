@@ -54,14 +54,19 @@ async def list_users(
     page_size: int = Query(20, ge=1, le=100),
     keyword: Optional[str] = None,
     role: Optional[str] = None,
+    locked: Optional[bool] = None,
     current_user: User = Depends(require_permission("admin_access")),
     db: AsyncSession = Depends(get_db),
 ):
     """用户列表（分页）
 
     默认只展示管理员和客服；有 keyword 时搜索全部用户（包括普通用户）。
+    locked=true 时只返回被锁定的用户（所有角色）。
     """
     conditions = []
+    if locked:
+        # 筛选被锁定的用户（locked_until 不为空且未过期）
+        conditions.append(User.locked_until.isnot(None))
     if keyword:
         safe_kw = escape_like(keyword)
         conditions.append(
@@ -72,8 +77,8 @@ async def list_users(
         )
     if role:
         conditions.append(User.role == role)
-    elif not keyword:
-        # 无 keyword 且无 role 筛选时，默认只返回管理员和客服
+    elif not keyword and not locked:
+        # 无 keyword 且无 role 筛选且无 locked 筛选时，默认只返回管理员和客服
         conditions.append(User.role.in_([
             UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.AGENT
         ]))

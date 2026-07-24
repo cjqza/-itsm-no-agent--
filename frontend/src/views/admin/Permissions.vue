@@ -20,6 +20,7 @@
                   <el-option label="管理员" value="admin" />
                   <el-option label="客服" value="agent" />
                   <el-option label="普通用户" value="user" />
+                  <el-option label="已锁定" value="locked" />
                 </el-select>
                 <el-input
                   v-model="searchKeyword"
@@ -81,13 +82,6 @@
                   >
                     {{ row.status === 'active' ? '禁用' : '启用' }}
                   </el-button>
-                  <el-button
-                    v-if="row.locked_until"
-                    type="warning"
-                    size="small"
-                    link
-                    @click="handleUnlock(row)"
-                  >解锁</el-button>
                 </template>
                 <template v-else-if="row.role === 'admin' || row.role === 'super_admin'">
                   <el-button
@@ -111,6 +105,14 @@
                 <template v-else>
                   <span class="no-action">-</span>
                 </template>
+                <!-- 解锁按钮：所有角色的锁定用户都显示 -->
+                <el-button
+                  v-if="row.locked_until"
+                  type="warning"
+                  size="small"
+                  link
+                  @click="handleUnlock(row)"
+                >解锁</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -393,7 +395,9 @@ async function loadUsers() {
     if (searchKeyword.value.trim()) {
       params.keyword = searchKeyword.value.trim()
     }
-    if (roleFilter.value) {
+    if (roleFilter.value === 'locked') {
+      params.locked = true
+    } else if (roleFilter.value) {
       params.role = roleFilter.value
     }
     const res = await adminApi.getUsers(params)
