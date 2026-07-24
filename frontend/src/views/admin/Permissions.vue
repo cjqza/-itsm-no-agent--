@@ -41,71 +41,45 @@
             </div>
           </template>
           <el-table :data="users" stripe v-loading="loading" class="perm-table" empty-text="暂无用户数据">
-            <el-table-column prop="id" label="ID" width="60" />
             <el-table-column prop="login_id" label="账号" width="100" />
-            <el-table-column prop="name" label="姓名" width="100">
-              <template #default="{ row }">
-                <span class="user-name-cell">{{ row.name }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="role" label="角色" width="110">
+            <el-table-column prop="name" label="姓名" width="100" />
+            <el-table-column prop="role" label="角色" width="100">
               <template #default="{ row }">
                 <el-tag :type="row.role === 'admin' || row.role === 'super_admin' ? 'danger' : row.role === 'agent' ? 'warning' : 'info'" size="small" effect="light" round>
                   {{ roleText(row.role) }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="phone" label="手机号" width="130" />
+            <el-table-column prop="phone" label="手机号" width="120" />
             <el-table-column prop="email" label="邮箱" min-width="150" show-overflow-tooltip />
-            <el-table-column prop="department" label="部门" width="120" show-overflow-tooltip />
-            <el-table-column prop="status" label="状态" width="100" align="center">
+            <el-table-column label="ITSM" width="60" align="center">
               <template #default="{ row }">
-                <div>
-                  <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small" effect="light" round>
-                    {{ row.status === 'active' ? '正常' : '已禁用' }}
-                  </el-tag>
-                  <el-tag v-if="row.locked_until" type="warning" size="small" effect="light" round style="margin-top: 4px;">
-                    已锁定
-                  </el-tag>
-                </div>
+                <el-icon v-if="row.itsm_access" color="#67c23a"><SuccessFilled /></el-icon>
+                <el-icon v-else color="#c0c4cc"><CircleCloseFilled /></el-icon>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="200" align="center">
+            <el-table-column label="OPS" width="60" align="center">
               <template #default="{ row }">
-                <template v-if="row.role === 'agent'">
-                  <el-button type="primary" size="small" link @click="openDetailDialog(row)">详情</el-button>
-                  <el-button
-                    :type="row.status === 'active' ? 'danger' : 'success'"
-                    size="small"
-                    link
-                    @click="handleToggleStatus(row)"
-                  >
-                    {{ row.status === 'active' ? '禁用' : '启用' }}
-                  </el-button>
-                </template>
-                <template v-else-if="row.role === 'admin' || row.role === 'super_admin'">
-                  <el-button
-                    v-if="userStore.isSuperAdmin"
-                    type="primary"
-                    size="small"
-                    link
-                    @click="openEditAdminDialog(row)"
-                  >编辑</el-button>
-                  <el-button
-                    v-if="userStore.isSuperAdmin && row.role === 'admin' && row.id !== userStore.user.id"
-                    :type="row.status === 'active' ? 'danger' : 'success'"
-                    size="small"
-                    link
-                    @click="handleToggleAdminStatus(row)"
-                  >
-                    {{ row.status === 'active' ? '禁用' : '启用' }}
-                  </el-button>
-                  <span v-if="!userStore.isSuperAdmin" class="no-action">-</span>
-                </template>
-                <template v-else>
-                  <span class="no-action">-</span>
-                </template>
-                <!-- 解锁按钮：所有角色的锁定用户都显示 -->
+                <el-icon v-if="row.ops_access" color="#67c23a"><SuccessFilled /></el-icon>
+                <el-icon v-else color="#c0c4cc"><CircleCloseFilled /></el-icon>
+              </template>
+            </el-table-column>
+            <el-table-column label="后台" width="60" align="center">
+              <template #default="{ row }">
+                <el-icon v-if="row.admin_access" color="#67c23a"><SuccessFilled /></el-icon>
+                <el-icon v-else color="#c0c4cc"><CircleCloseFilled /></el-icon>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="80" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.locked_until ? 'danger' : row.status === 'active' ? 'success' : 'info'" size="small" effect="light" round>
+                  {{ row.locked_until ? '已锁定' : row.status === 'active' ? '正常' : '已禁用' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="150" align="center">
+              <template #default="{ row }">
+                <el-button type="primary" size="small" link @click="openSettingsDialog(row)">设置</el-button>
                 <el-button
                   v-if="row.locked_until"
                   type="warning"
@@ -177,52 +151,101 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 客服详情对话框 -->
+    <!-- 用户设置对话框 -->
     <el-dialog
-      v-model="detailDialogVisible"
-      title="客服详情"
-      width="480px"
+      v-model="settingsDialogVisible"
+      title="用户设置"
+      width="560px"
       :close-on-click-modal="false"
+      @closed="resetSettingsForm"
     >
-      <template v-if="detailUser">
-        <el-descriptions :column="1" border>
-          <el-descriptions-item label="账号">{{ detailUser.login_id }}</el-descriptions-item>
-          <el-descriptions-item label="姓名">{{ detailUser.name }}</el-descriptions-item>
-          <el-descriptions-item label="手机号">{{ detailUser.phone }}</el-descriptions-item>
-          <el-descriptions-item label="邮箱">{{ detailUser.email || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="部门">{{ detailUser.department || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="状态">
-            <el-tag :type="detailUser.status === 'active' ? 'success' : 'info'" size="small">
-              {{ detailUser.status === 'active' ? '正常' : '已禁用' }}
-            </el-tag>
-          </el-descriptions-item>
-        </el-descriptions>
+      <template v-if="settingsUser">
+        <el-tabs v-model="settingsTab">
+          <!-- 基本信息 -->
+          <el-tab-pane label="基本信息" name="info">
+            <el-form :model="settingsForm" label-width="80px" label-position="right">
+              <el-form-item label="账号">
+                <el-input :value="settingsUser.login_id" disabled />
+              </el-form-item>
+              <el-form-item label="姓名">
+                <el-input v-model="settingsForm.name" placeholder="请输入姓名" />
+              </el-form-item>
+              <el-form-item label="手机号">
+                <el-input v-model="settingsForm.phone" placeholder="请输入手机号" />
+              </el-form-item>
+              <el-form-item label="邮箱">
+                <el-input v-model="settingsForm.email" placeholder="请输入邮箱" />
+              </el-form-item>
+              <el-form-item label="部门">
+                <el-input v-model="settingsForm.department" placeholder="请输入部门" />
+              </el-form-item>
+              <el-form-item label="角色">
+                <el-tag :type="settingsUser.role === 'admin' || settingsUser.role === 'super_admin' ? 'danger' : settingsUser.role === 'agent' ? 'warning' : 'info'" size="small">
+                  {{ roleText(settingsUser.role) }}
+                </el-tag>
+              </el-form-item>
+              <el-form-item label="状态">
+                <el-tag :type="settingsUser.status === 'active' ? 'success' : 'info'" size="small">
+                  {{ settingsUser.status === 'active' ? '正常' : '已禁用' }}
+                </el-tag>
+                <el-tag v-if="settingsUser.locked_until" type="danger" size="small" style="margin-left: 8px;">
+                  已锁定
+                </el-tag>
+              </el-form-item>
+            </el-form>
+          </el-tab-pane>
 
-        <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee;">
-          <div style="font-weight: bold; margin-bottom: 12px; color: #333;">权限管理</div>
-          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-            <el-button
-              type="danger"
-              size="small"
-              @click="handleDowngrade(detailUser)"
-            >取消客服</el-button>
-            <el-button
-              v-if="detailUser.itsm_access"
-              type="warning"
-              size="small"
-              @click="handleRevokePermission(detailUser, 'itsm')"
-            >取消 ITSM 权限</el-button>
-            <el-button
-              v-if="detailUser.ops_access"
-              type="warning"
-              size="small"
-              @click="handleRevokePermission(detailUser, 'ops')"
-            >取消 OPS 权限</el-button>
-          </div>
-        </div>
+          <!-- 权限管理 -->
+          <el-tab-pane label="权限管理" name="perms">
+            <div class="perm-settings">
+              <div class="perm-item">
+                <div class="perm-label">ITSM 权限</div>
+                <div class="perm-desc">工单管理、接单、处理、转派</div>
+                <el-switch
+                  v-model="settingsPermForm.itsm_access"
+                  :disabled="!canEditPerms"
+                  @change="handlePermChange('itsm')"
+                />
+              </div>
+              <div class="perm-item">
+                <div class="perm-label">OPS 权限</div>
+                <div class="perm-desc">数据统计、报表导出、绩效分析</div>
+                <el-switch
+                  v-model="settingsPermForm.ops_access"
+                  :disabled="!canEditPerms"
+                  @change="handlePermChange('ops')"
+                />
+              </div>
+              <div class="perm-item">
+                <div class="perm-label">后台管理权限</div>
+                <div class="perm-desc">用户管理、权限配置、系统设置</div>
+                <el-switch
+                  v-model="settingsPermForm.admin_access"
+                  :disabled="!userStore.isSuperAdmin"
+                  @change="handlePermChange('admin')"
+                />
+                <div v-if="!userStore.isSuperAdmin" class="perm-hint">
+                  仅超级管理员可修改后台权限
+                </div>
+              </div>
+
+              <div v-if="settingsUser.role === 'agent'" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee;">
+                <el-button type="danger" size="small" @click="handleDowngradeFromSettings">
+                  取消客服身份
+                </el-button>
+              </div>
+              <div v-else-if="settingsUser.role === 'user'" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee;">
+                <el-button type="success" size="small" @click="handleUpgradeFromSettings">
+                  升级为客服
+                </el-button>
+              </div>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
       </template>
       <template #footer>
-        <el-button @click="detailDialogVisible = false">关闭</el-button>
+        <el-button @click="settingsDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="handleSaveUserInfo">保存</el-button>
       </template>
     </el-dialog>
 
@@ -355,7 +378,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { adminApi } from '@/api'
@@ -383,9 +406,26 @@ const reqStatusFilter = ref('pending')
 const dialogVisible = ref(false)
 const detailDialogVisible = ref(false)
 const detailUser = ref(null)
+const settingsDialogVisible = ref(false)
+const settingsUser = ref(null)
+const settingsTab = ref('info')
+const settingsForm = reactive({
+  name: '',
+  phone: '',
+  email: '',
+  department: '',
+})
+const settingsPermForm = reactive({
+  itsm_access: false,
+  ops_access: false,
+  admin_access: false,
+})
 const submitting = ref(false)
 const formRef = ref(null)
 const editingUserId = ref(null)
+
+// 是否有权限编辑（admin 或 super_admin）
+const canEditPerms = computed(() => userStore.isAdmin)
 
 const agentForm = reactive({
   name: '',
@@ -567,6 +607,100 @@ function openAddDialog() {
 function openDetailDialog(row) {
   detailUser.value = row
   detailDialogVisible.value = true
+}
+
+function openSettingsDialog(row) {
+  settingsUser.value = row
+  settingsForm.name = row.name || ''
+  settingsForm.phone = row.phone || ''
+  settingsForm.email = row.email || ''
+  settingsForm.department = row.department || ''
+  settingsPermForm.itsm_access = row.itsm_access || false
+  settingsPermForm.ops_access = row.ops_access || false
+  settingsPermForm.admin_access = row.admin_access || false
+  settingsTab.value = 'info'
+  settingsDialogVisible.value = true
+}
+
+function resetSettingsForm() {
+  settingsUser.value = null
+  settingsForm.name = ''
+  settingsForm.phone = ''
+  settingsForm.email = ''
+  settingsForm.department = ''
+  settingsPermForm.itsm_access = false
+  settingsPermForm.ops_access = false
+  settingsPermForm.admin_access = false
+}
+
+async function handleSaveUserInfo() {
+  if (!settingsUser.value) return
+  submitting.value = true
+  try {
+    await adminApi.updateUser(settingsUser.value.id, {
+      name: settingsForm.name,
+      phone: settingsForm.phone,
+      email: settingsForm.email,
+      department: settingsForm.department,
+    })
+    ElMessage.success('保存成功')
+    settingsDialogVisible.value = false
+    await loadUsers()
+  } catch (e) {
+    // error handled by interceptor
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function handlePermChange(permType) {
+  if (!settingsUser.value) return
+  const permName = permType === 'itsm' ? 'ITSM' : permType === 'ops' ? 'OPS' : '后台'
+  const newValue = settingsPermForm[`${permType}_access`]
+  try {
+    const params = {}
+    params[`${permType}_access`] = newValue
+    await adminApi.updatePermission(settingsUser.value.id, params)
+    ElMessage.success(`已${newValue ? '开启' : '关闭'} ${permName} 权限`)
+    await loadUsers()
+    // 更新设置用户数据
+    const updated = users.value.find(u => u.id === settingsUser.value.id)
+    if (updated) settingsUser.value = updated
+  } catch (e) {
+    // 回滚 switch 状态
+    settingsPermForm[`${permType}_access`] = !newValue
+  }
+}
+
+async function handleUpgradeFromSettings() {
+  if (!settingsUser.value) return
+  try {
+    await adminApi.upgradeToAgent(settingsUser.value.id)
+    ElMessage.success(`已将 ${settingsUser.value.name} 升级为客服`)
+    settingsDialogVisible.value = false
+    await loadUsers()
+  } catch (e) {
+    // error handled by interceptor
+  }
+}
+
+async function handleDowngradeFromSettings() {
+  if (!settingsUser.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确定要取消「${settingsUser.value.name}」的客服身份吗？`,
+      '操作确认',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    )
+    await adminApi.downgradeToUser(settingsUser.value.id)
+    ElMessage.success(`已取消 ${settingsUser.value.name} 的客服身份`)
+    settingsDialogVisible.value = false
+    await loadUsers()
+  } catch (e) {
+    if (e !== 'cancel') {
+      // error handled by interceptor
+    }
+  }
 }
 
 async function handleRevokePermission(row, permType) {
@@ -866,5 +1000,35 @@ function statusText(s) { return { pending: '待审批', approved: '已批准', r
   display: flex;
   justify-content: flex-end;
   padding: 16px 0 4px;
+}
+
+/* 权限设置样式 */
+.perm-settings {
+  padding: 8px 0;
+}
+.perm-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  margin-bottom: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+.perm-label {
+  font-weight: 600;
+  color: #1e293b;
+  min-width: 100px;
+}
+.perm-desc {
+  flex: 1;
+  color: #64748b;
+  font-size: 13px;
+  margin: 0 16px;
+}
+.perm-hint {
+  color: #f56c6c;
+  font-size: 12px;
+  margin-left: 12px;
 }
 </style>
