@@ -60,7 +60,7 @@
             v-for="msg in messages"
             :key="msg.id"
             :msg="msg"
-            :current-user-id="store.user.id"
+            :current-user-id="store.user?.id"
           />
           <div v-if="messages.length === 0" class="no-messages">暂无消息</div>
         </div>
@@ -131,7 +131,7 @@ onUnmounted(() => {
 async function loadTickets() {
   try {
     const res = await ticketApi.list({
-      assignee_id: store.user.id,
+      assignee_id: store.user?.id,
       page_size: 100,
     })
     ticketList.value = (res.items || []).filter(t =>

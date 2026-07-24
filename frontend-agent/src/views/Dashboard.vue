@@ -163,7 +163,7 @@ const acceptedTickets = computed(() => allTickets.value.filter(t => t.status ===
 
 // 我的待办：我处理中（processing，指派给我）
 const myProcessingTickets = computed(() =>
-  allTickets.value.filter(t => t.status === 'processing' && t.assignee_id === store.user.id)
+  allTickets.value.filter(t => t.status === 'processing' && t.assignee_id === store.user?.id)
 )
 
 // 已解决工单：待评价 + 已评价

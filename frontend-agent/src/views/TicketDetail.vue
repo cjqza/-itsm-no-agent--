@@ -129,7 +129,7 @@
                 <div class="sys-msg">{{ msg.content }}</div>
               </template>
               <template v-else>
-                <div :class="['bubble', msg.sender_id === store.user.id ? 'mine' : 'other']">
+                <div :class="['bubble', msg.sender_id === store.user?.id ? 'mine' : 'other']">
                   <div class="sender">{{ msg.sender_name }}</div>
                   <div class="text">{{ msg.content }}</div>
                 </div>
