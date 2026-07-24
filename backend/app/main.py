@@ -210,9 +210,9 @@ async def rate_limit_middleware(request: Request, call_next):
 
     client_ip = _get_client_ip(request)
 
-    # 登录接口: 5次/分钟/IP
+    # 登录接口: 10次/分钟/IP（用户可能需要登录多个前端）
     if "/auth/login" in path:
-        if not await _check_rate_limit(client_ip, path, limit=5, window=60):
+        if not await _check_rate_limit(client_ip, path, limit=10, window=60):
             logger.warning(f"限流: {client_ip} 登录接口请求过于频繁")
             return JSONResponse(
                 status_code=429,
