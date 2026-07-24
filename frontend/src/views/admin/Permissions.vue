@@ -600,15 +600,19 @@ function handlePageChange(page) {
   loadUsers()
 }
 
-function openAddDialog() {
-  isEditMode.value = false
-  editingUserId.value = null
-  resetFormData()
-  upgradeSearch.value = ''
-  selectedUpgradeUser.value = null
-  upgradeUsers.value = []
-  dialogVisible.value = true
-  searchUsersForUpgrade()
+async function openAddDialog() {
+  try {
+    isEditMode.value = false
+    editingUserId.value = null
+    resetFormData()
+    upgradeSearch.value = ''
+    selectedUpgradeUser.value = null
+    upgradeUsers.value = []
+    dialogVisible.value = true
+    await searchUsersForUpgrade()
+  } catch (e) {
+    ElMessage.error('打开对话框失败')
+  }
 }
 
 function openDetailDialog(row) {
