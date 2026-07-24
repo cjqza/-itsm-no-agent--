@@ -220,8 +220,8 @@ async function handleLogin() {
     const status = e.response?.status
     const requireCaptcha = e.response?.headers?.['x-require-captcha'] === 'true'
 
-    // 如果需要验证码，弹出验证码对话框
-    if (status === 401 && requireCaptcha) {
+    // 如果需要验证码（400或401都可能），弹出验证码对话框
+    if (requireCaptcha) {
       await fetchLoginCaptcha()
       captchaForm.captcha_text = ''
       showCaptchaDialog.value = true
