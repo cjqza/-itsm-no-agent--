@@ -18,6 +18,7 @@ export default defineConfig({
       '@': '/src',
       '@shared': path.resolve(__dirname, '../shared'),
     },
+    dedupe: ['vue', 'element-plus', '@element-plus/icons-vue', 'axios', 'dayjs'],
   },
   test: {
     globals: true,
