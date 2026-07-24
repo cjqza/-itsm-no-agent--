@@ -455,6 +455,9 @@ async function searchUsersForUpgrade() {
     }
     const res = await adminApi.getUsers(params)
     upgradeUsers.value = res?.items || []
+  } catch (e) {
+    ElMessage.error('加载用户列表失败')
+    upgradeUsers.value = []
   } finally {
     upgradeLoading.value = false
   }
@@ -557,6 +560,10 @@ async function loadUsers() {
     const res = await adminApi.getUsers(params)
     users.value = res?.items || []
     total.value = res?.total || 0
+  } catch (e) {
+    ElMessage.error('加载用户列表失败')
+    users.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
