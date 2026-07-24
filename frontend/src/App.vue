@@ -5,6 +5,16 @@
 </template>
 
 <script setup>
+import { onMounted } from 'vue'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
+
+onMounted(() => {
+  if (localStorage.getItem('token')) {
+    userStore.fetchMe()
+  }
+})
 </script>
 
 <style>

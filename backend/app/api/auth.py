@@ -129,6 +129,7 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
     # 登录成功：重置失败计数
     user.login_fail_count = 0
     user.locked_until = None
+    await db.commit()
 
     # 非激活状态不能登录
     if user.status != UserStatus.ACTIVE:
@@ -185,7 +186,7 @@ async def register(req: RegisterRequest, request: Request, db: AsyncSession = De
     # 自动创建空 Permission 记录
     perm = Permission(user_id=user.id)
     db.add(perm)
-    await db.flush()
+    await db.commit()
 
     # 自动登录，返回 token
     token = create_access_token({"user_id": user.id, "role": user.role.value})

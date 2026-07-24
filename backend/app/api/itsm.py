@@ -7,15 +7,14 @@ from typing import Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel
 
-from app.database import get_db, AsyncSessionLocal
-from app.models.user import User, UserRole
+from app.database import get_db
+from app.models.user import User
 from app.models.ticket import Ticket, TicketStatus, TicketLog
-from app.models.permission import Permission
 from app.schemas.ticket import (
     TicketCreate, TicketUpdate, TicketStatusUpdate,
     TicketRate, TicketRemark, TicketMessage,
 )
-from app.utils.auth import get_current_user, require_permission
+from app.utils.auth import get_current_user, require_permission, has_permission
 from app.services.ticket_service import ticket_service
 from app.services.sla_service import sla_service
 
@@ -45,15 +44,8 @@ async def list_categories_public(
 
 
 async def _has_itsm_access(current_user: User) -> bool:
-    """内联检查用户是否拥有 itsm_access 权限"""
-    if current_user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
-        return True
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Permission).where(Permission.user_id == current_user.id)
-        )
-        perm = result.scalar_one_or_none()
-    return bool(perm and perm.itsm_access)
+    """内联检查用户是否拥有 itsm_access 权限（复用缓存）"""
+    return await has_permission(current_user, "itsm_access")
 
 
 class TicketTransferRequest(BaseModel):
@@ -236,6 +228,7 @@ async def update_ticket(
         operator_id=current_user.id,
         **update_data,
     )
+    await db.commit()
     return {"success": True, "ticket_no": ticket.ticket_no}
 
 
@@ -251,6 +244,7 @@ async def accept_ticket(
         ticket_id=ticket_id,
         agent_id=current_user.id,
     )
+    await db.commit()
     return {"success": True, "status": ticket.status.value}
 
 
@@ -269,6 +263,7 @@ async def update_status(
         operator_id=current_user.id,
         remark=data.remark,
     )
+    await db.commit()
     return {"success": True, "status": ticket.status.value}
 
 
@@ -285,6 +280,7 @@ async def resolve_ticket(
         new_status=TicketStatus.RESOLVED_PENDING_REVIEW.value,
         operator_id=current_user.id,
     )
+    await db.commit()
     return {"success": True, "status": ticket.status.value}
 
 
@@ -313,6 +309,7 @@ async def rate_ticket(
         rating=data.rating,
         comment=data.rating_comment,
     )
+    await db.commit()
     return {"success": True, "rating": ticket.rating}
 
 
@@ -331,6 +328,7 @@ async def add_remark(
         remark=data.remark,
         pause_sla=data.pause_ola,
     )
+    await db.commit()
     return {"success": True}
 
 

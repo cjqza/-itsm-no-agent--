@@ -1,6 +1,6 @@
 """OPS API - 查询与统计"""
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, func, and_, case, text
+from sqlalchemy import select, func, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from datetime import datetime, timedelta, timezone
@@ -245,17 +245,16 @@ async def statistics_trend(
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
     result = await db.execute(
-        text("""
-            SELECT DATE(created_at) as date, COUNT(*) as count
-            FROM tickets
-            WHERE created_at >= :since
-            GROUP BY DATE(created_at)
-            ORDER BY date
-        """),
-        {"since": since},
+        select(
+            func.date(Ticket.created_at).label("date"),
+            func.count().label("count"),
+        )
+        .where(Ticket.created_at >= since)
+        .group_by(func.date(Ticket.created_at))
+        .order_by(func.date(Ticket.created_at))
     )
 
-    return [{"date": str(row[0]), "count": row[1]} for row in result.all()]
+    return [{"date": str(row.date), "count": row.count} for row in result.all()]
 
 
 @router.get("/export")

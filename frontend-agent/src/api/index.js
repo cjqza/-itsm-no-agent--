@@ -40,6 +40,7 @@ export const chatApi = {
 export const adminApi = {
   getCategories: () => api.get('/admin/categories/'),
   getAgents: () => api.get('/admin/agents'),
+  createPermissionRequest: (data) => api.post('/admin/permission-requests', null, { params: data }),
 }
 
 export const templateApi = {

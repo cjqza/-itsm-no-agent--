@@ -34,12 +34,10 @@ async def get_db():
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            await session.commit()
+            # 不再自动 commit，由端点显式 commit
         except Exception:
             await session.rollback()
             raise
-        finally:
-            await session.close()
 
 
 async def init_db():

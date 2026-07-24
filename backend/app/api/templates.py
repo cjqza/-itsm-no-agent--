@@ -64,7 +64,7 @@ async def create_template(
         created_by=current_user.id,
     )
     db.add(template)
-    await db.flush()
+    await db.commit()
     await db.refresh(template)
     return _template_to_dict(template)
 
@@ -87,7 +87,7 @@ async def update_template(
         template.content = data.content
     if data.category is not None:
         template.category = data.category
-    await db.flush()
+    await db.commit()
     await db.refresh(template)
     return _template_to_dict(template)
 
@@ -104,4 +104,5 @@ async def delete_template(
     if not template:
         raise HTTPException(status_code=404, detail="模板不存在")
     await db.delete(template)
+    await db.commit()
     return {"success": True}

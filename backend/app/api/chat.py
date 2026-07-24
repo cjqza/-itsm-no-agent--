@@ -12,7 +12,7 @@ from app.database import get_db, AsyncSessionLocal
 from app.models.user import User
 from app.models.ticket import Ticket, TicketStatus
 from app.models.chat import ChatRoom, ChatMessage, RoomStatus, MessageType, ChatMessageRead
-from app.utils.auth import get_current_user, decode_token
+from app.utils.auth import get_current_user, decode_token, has_permission
 from app.utils.websocket import ws_manager
 
 router = APIRouter(prefix="/api/chat", tags=["聊天"])
@@ -27,13 +27,23 @@ class SendMessageRequest(BaseModel):
 
 
 # 聊天室连接管理
+MAX_CHAT_CONNECTIONS_PER_USER = 5
 chat_connections: dict[int, set] = {}  # room_id -> set of (websocket, user_id)
 
 
+def _count_user_chat_connections(uid: int) -> int:
+    """统计指定用户在所有聊天室中的连接数"""
+    count = 0
+    for conns in chat_connections.values():
+        for ws, conn_uid in conns:
+            if conn_uid == uid:
+                count += 1
+    return count
+
+
 async def _check_room_access(room_id: int, current_user: User, db: AsyncSession) -> ChatRoom:
-    """校验用户是否有权访问聊天室：创建者、被分配客服、或有 itsm_access"""
+    """校验用户是否有权访问聊天室：创建者、被分配客服、或有 itsm_access（复用缓存）"""
     from app.models.user import UserRole
-    from app.models.permission import Permission
 
     result = await db.execute(
         select(ChatRoom)
@@ -52,12 +62,8 @@ async def _check_room_access(room_id: int, current_user: User, db: AsyncSession)
     if ticket and (ticket.creator_id == current_user.id or ticket.assignee_id == current_user.id):
         return room
 
-    # 检查 itsm_access
-    perm_result = await db.execute(
-        select(Permission).where(Permission.user_id == current_user.id)
-    )
-    perm = perm_result.scalar_one_or_none()
-    if perm and perm.itsm_access:
+    # 检查 itsm_access（复用缓存）
+    if await has_permission(current_user, "itsm_access"):
         return room
 
     raise HTTPException(status_code=403, detail="无权访问此聊天室")
@@ -79,13 +85,8 @@ async def create_chat_room(
     # 归属校验：仅工单创建者或有 itsm_access 的用户可创建聊天室
     if ticket.creator_id != current_user.id:
         from app.models.user import UserRole
-        from app.models.permission import Permission
         if current_user.role not in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
-            perm_result = await db.execute(
-                select(Permission).where(Permission.user_id == current_user.id)
-            )
-            perm = perm_result.scalar_one_or_none()
-            if not perm or not perm.itsm_access:
+            if not await has_permission(current_user, "itsm_access"):
                 raise HTTPException(status_code=403, detail="无权为此工单创建聊天室")
 
     # 检查是否已有聊天室，有则直接返回
@@ -574,7 +575,6 @@ async def websocket_chat(websocket: WebSocket, room_id: int, token: str = ""):
                 return
             if access_room.ticket:
                 from app.models.user import UserRole
-                from app.models.permission import Permission
                 has_access = False
                 if access_room.ticket.creator_id == user_id or access_room.ticket.assignee_id == user_id:
                     has_access = True
@@ -584,11 +584,7 @@ async def websocket_chat(websocket: WebSocket, room_id: int, token: str = ""):
                     if ws_user and ws_user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
                         has_access = True
                 if not has_access:
-                    perm_result = await access_db.execute(
-                        select(Permission).where(Permission.user_id == user_id)
-                    )
-                    perm = perm_result.scalar_one_or_none()
-                    if perm and perm.itsm_access:
+                    if ws_user and await has_permission(ws_user, "itsm_access"):
                         has_access = True
                 if not has_access:
                     await websocket.close(code=4003, reason="无权访问此聊天室")
@@ -596,6 +592,11 @@ async def websocket_chat(websocket: WebSocket, room_id: int, token: str = ""):
         except Exception:
             await websocket.close(code=4003, reason="权限校验失败")
             return
+
+    # 检查每用户连接数限制
+    if _count_user_chat_connections(user_id) >= MAX_CHAT_CONNECTIONS_PER_USER:
+        await websocket.close(code=1008, reason="聊天连接数超限")
+        return
 
     await websocket.accept()
 

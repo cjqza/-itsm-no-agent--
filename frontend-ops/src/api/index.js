@@ -24,4 +24,8 @@ export const ticketApi = {
   logs: (id) => api.get(`/itsm/tickets/${id}/logs`),
 }
 
+export const adminApi = {
+  createPermissionRequest: (data) => api.post('/admin/permission-requests', null, { params: data }),
+}
+
 export default api

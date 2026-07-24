@@ -159,6 +159,32 @@ def _invalidate_all_perm_cache() -> None:
     _perm_cache.clear()
 
 
+async def has_permission(user: User, permission_field: str) -> bool:
+    """检查用户是否拥有指定权限（带缓存），返回 bool 而非 raise。"""
+    if user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
+        return True
+
+    cached = await _get_perm_from_cache(user.id)
+    if cached is not None:
+        itsm, ops, admin = cached
+    else:
+        async with AsyncSessionLocal() as db:
+            from app.models.permission import Permission
+            result = await db.execute(
+                select(Permission).where(Permission.user_id == user.id)
+            )
+            perm = result.scalar_one_or_none()
+        if perm is None:
+            return False
+        itsm = bool(perm.itsm_access)
+        ops = bool(perm.ops_access)
+        admin = bool(perm.admin_access)
+        await _set_perm_cache(user.id, itsm, ops, admin)
+
+    field_map = {"itsm_access": itsm, "ops_access": ops, "admin_access": admin}
+    return field_map.get(permission_field, False)
+
+
 def require_permission(permission_field: str):
     """权限检查装饰器工厂"""
     async def check_permission(

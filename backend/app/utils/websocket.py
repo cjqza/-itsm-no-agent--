@@ -7,6 +7,8 @@ from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
 
+MAX_CONNECTIONS_PER_USER = 5
+
 
 class ConnectionManager:
     """WebSocket连接管理器"""
@@ -16,10 +18,14 @@ class ConnectionManager:
         self._connections: Dict[int, Set[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, user_id: int):
-        """接受WebSocket连接"""
-        await websocket.accept()
+        """接受WebSocket连接，超过每用户上限时拒绝"""
         if user_id not in self._connections:
             self._connections[user_id] = set()
+        if len(self._connections[user_id]) >= MAX_CONNECTIONS_PER_USER:
+            await websocket.close(code=1008, reason="连接数超限")
+            logger.warning(f"用户 {user_id} WebSocket 连接数超限 ({MAX_CONNECTIONS_PER_USER})")
+            return
+        await websocket.accept()
         self._connections[user_id].add(websocket)
         logger.info(f"用户 {user_id} 建立WebSocket连接, 当前连接数: {self.total_connections}")
 
