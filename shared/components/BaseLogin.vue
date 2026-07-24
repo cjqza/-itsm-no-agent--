@@ -39,6 +39,29 @@
             @keyup.enter="handleLogin"
           />
         </el-form-item>
+        <el-form-item>
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-input
+              v-model="form.captcha_text"
+              placeholder="请输入验证码"
+              size="large"
+              @keyup.enter="handleLogin"
+              style="flex: 1"
+            />
+            <img
+              v-if="loginCaptchaImg"
+              :src="loginCaptchaImg"
+              @click="fetchLoginCaptcha"
+              style="height: 40px; cursor: pointer; border-radius: 4px; border: 1px solid #e2e8f0"
+              alt="验证码"
+            />
+            <span
+              v-else
+              @click="fetchLoginCaptcha"
+              style="cursor: pointer; color: #64748b; white-space: nowrap; line-height: 40px"
+            >获取验证码</span>
+          </div>
+        </el-form-item>
         <el-button
           type="primary"
           size="large"
@@ -153,17 +176,41 @@ const emit = defineEmits(['login-success', 'register-success', 'reset-success'])
 // --- 登录 ---
 const loginLoading = ref(false)
 const loginFormRef = ref(null)
-const form = reactive({ account: '', password: '' })
+const form = reactive({ account: '', password: '', captcha_text: '' })
+
+// 登录验证码
+const loginCaptchaImg = ref('')
+const loginCaptchaId = ref('')
+
+async function fetchLoginCaptcha() {
+  try {
+    const res = await props.captchaApi()
+    loginCaptchaImg.value = res.image
+    loginCaptchaId.value = res.captcha_id
+  } catch (e) { console.error('获取验证码失败', e) }
+}
+
+// 初始化时加载验证码
+fetchLoginCaptcha()
 
 async function handleLogin() {
   if (!form.account) { ElMessage.warning('请输入账号'); return }
   if (!form.password) { ElMessage.warning('请输入密码'); return }
+  if (!form.captcha_text) { ElMessage.warning('请输入验证码'); return }
   loginLoading.value = true
   try {
-    await props.loginHandler({ account: form.account, password: form.password })
+    await props.loginHandler({
+      account: form.account,
+      password: form.password,
+      captcha_id: loginCaptchaId.value,
+      captcha_text: form.captcha_text,
+    })
     ElMessage.success('登录成功')
     emit('login-success')
   } catch (e) {
+    // 刷新验证码
+    fetchLoginCaptcha()
+    form.captcha_text = ''
     ElMessage.error(e.response?.data?.detail || '登录失败')
   } finally {
     loginLoading.value = false
