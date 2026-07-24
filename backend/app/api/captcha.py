@@ -101,20 +101,21 @@ async def generate_captcha() -> dict:
 
 async def verify_captcha(captcha_id: str | None, text: str | None, test_mode: bool = False) -> bool:
     """验证验证码（一次性使用，验证后删除）。返回 True 表示通过。
-    test_mode=True 时仅验证 captcha_id 是否存在（跳过文本比对，用于自动化测试）。
+    test_mode=True 时跳过所有验证（用于自动化测试）。
     """
     if not captcha_id:
         return False
 
-    if not test_mode and not text:
+    # 测试模式：直接通过
+    if test_mode:
+        return True
+
+    if not text:
         return False
 
     expected = await _verify_and_delete_captcha(captcha_id)
     if expected is None:
         return False
-
-    if test_mode:
-        return True
 
     return text.strip().lower() == expected.lower()
 

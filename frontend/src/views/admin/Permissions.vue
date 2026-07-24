@@ -73,7 +73,7 @@
             <el-table-column label="操作" width="200" align="center">
               <template #default="{ row }">
                 <template v-if="row.role === 'agent'">
-                  <el-button type="primary" size="small" link @click="openEditDialog(row)">编辑</el-button>
+                  <el-button type="primary" size="small" link @click="openDetailDialog(row)">详情</el-button>
                   <el-button
                     :type="row.status === 'active' ? 'danger' : 'success'"
                     size="small"
@@ -82,7 +82,6 @@
                   >
                     {{ row.status === 'active' ? '禁用' : '启用' }}
                   </el-button>
-                  <el-button type="warning" size="small" link @click="handleDowngrade(row)">取消客服</el-button>
                 </template>
                 <template v-else-if="row.role === 'admin' || row.role === 'super_admin'">
                   <el-button
@@ -178,80 +177,101 @@
       </el-tab-pane>
     </el-tabs>
 
+    <!-- 客服详情对话框 -->
+    <el-dialog
+      v-model="detailDialogVisible"
+      title="客服详情"
+      width="480px"
+      :close-on-click-modal="false"
+    >
+      <template v-if="detailUser">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="账号">{{ detailUser.login_id }}</el-descriptions-item>
+          <el-descriptions-item label="姓名">{{ detailUser.name }}</el-descriptions-item>
+          <el-descriptions-item label="手机号">{{ detailUser.phone }}</el-descriptions-item>
+          <el-descriptions-item label="邮箱">{{ detailUser.email || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="部门">{{ detailUser.department || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="detailUser.status === 'active' ? 'success' : 'info'" size="small">
+              {{ detailUser.status === 'active' ? '正常' : '已禁用' }}
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee;">
+          <div style="font-weight: bold; margin-bottom: 12px; color: #333;">权限管理</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <el-button
+              type="danger"
+              size="small"
+              @click="handleDowngrade(detailUser)"
+            >取消客服</el-button>
+            <el-button
+              v-if="detailUser.itsm_access"
+              type="warning"
+              size="small"
+              @click="handleRevokePermission(detailUser, 'itsm')"
+            >取消 ITSM 权限</el-button>
+            <el-button
+              v-if="detailUser.ops_access"
+              type="warning"
+              size="small"
+              @click="handleRevokePermission(detailUser, 'ops')"
+            >取消 OPS 权限</el-button>
+          </div>
+        </div>
+      </template>
+      <template #footer>
+        <el-button @click="detailDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 升级为客服对话框 -->
     <el-dialog
       v-model="dialogVisible"
-      :title="isEditMode ? '编辑客服' : '升级为客服'"
+      title="升级为客服"
       width="520px"
       :close-on-click-modal="false"
       @closed="resetForm"
     >
-      <template v-if="!isEditMode">
-        <!-- 选择已有用户升级 -->
-        <div style="margin-bottom: 16px;">
-          <el-input
-            v-model="upgradeSearch"
-            placeholder="搜索用户姓名、账号、手机号"
-            clearable
-            @input="searchUsersForUpgrade"
-          >
-            <template #prefix><el-icon><Search /></el-icon></template>
-          </el-input>
-        </div>
-        <el-table
-          :data="upgradeUsers"
-          max-height="300"
-          highlight-current-row
-          @current-change="handleUpgradeUserSelect"
-          style="width: 100%"
-          v-loading="upgradeLoading"
+      <div style="margin-bottom: 16px;">
+        <el-input
+          v-model="upgradeSearch"
+          placeholder="搜索用户姓名、账号、手机号"
+          clearable
+          @input="searchUsersForUpgrade"
         >
-          <el-table-column prop="login_id" label="账号" width="100" />
-          <el-table-column prop="name" label="姓名" width="100" />
-          <el-table-column prop="phone" label="手机号" width="130" />
-          <el-table-column prop="role" label="角色" width="80">
-            <template #default="{ row }">
-              <el-tag size="small">{{ roleText(row.role) }}</el-tag>
-            </template>
-          </el-table-column>
-        </el-table>
-        <div v-if="selectedUpgradeUser" style="margin-top: 12px; padding: 8px; background: #f0f9ff; border-radius: 4px;">
-          已选择：<strong>{{ selectedUpgradeUser.name }}</strong>（{{ selectedUpgradeUser.login_id }}）
-        </div>
-      </template>
-      <template v-else>
-        <!-- 编辑模式 -->
-        <el-form
-          ref="formRef"
-          :model="agentForm"
-          :rules="formRules"
-          label-width="80px"
-          label-position="right"
-        >
-          <el-form-item label="姓名" prop="name">
-            <el-input v-model="agentForm.name" placeholder="请输入姓名" />
-          </el-form-item>
-          <el-form-item label="手机号" prop="phone">
-            <el-input v-model="agentForm.phone" placeholder="请输入手机号" />
-          </el-form-item>
-          <el-form-item label="邮箱">
-            <el-input v-model="agentForm.email" placeholder="请输入邮箱（可选）" />
-          </el-form-item>
-          <el-form-item label="部门">
-            <el-input v-model="agentForm.department" placeholder="请输入部门（可选）" />
-          </el-form-item>
-        </el-form>
-      </template>
+          <template #prefix><el-icon><Search /></el-icon></template>
+        </el-input>
+      </div>
+      <el-table
+        :data="upgradeUsers"
+        max-height="300"
+        highlight-current-row
+        @current-change="handleUpgradeUserSelect"
+        style="width: 100%"
+        v-loading="upgradeLoading"
+      >
+        <el-table-column prop="login_id" label="账号" width="100" />
+        <el-table-column prop="name" label="姓名" width="100" />
+        <el-table-column prop="phone" label="手机号" width="130" />
+        <el-table-column prop="role" label="角色" width="80">
+          <template #default="{ row }">
+            <el-tag size="small">{{ roleText(row.role) }}</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div v-if="selectedUpgradeUser" style="margin-top: 12px; padding: 8px; background: #f0f9ff; border-radius: 4px;">
+        已选择：<strong>{{ selectedUpgradeUser.name }}</strong>（{{ selectedUpgradeUser.login_id }}）
+      </div>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button
-          v-if="!isEditMode"
           type="primary"
           :loading="submitting"
           :disabled="!selectedUpgradeUser"
           @click="handleUpgrade"
         >升级为客服</el-button>
-        <el-button v-else type="primary" :loading="submitting" @click="handleSubmit">保存</el-button>
       </template>
     </el-dialog>
 
@@ -361,7 +381,8 @@ const reqStatusFilter = ref('pending')
 
 // ===== 对话框 =====
 const dialogVisible = ref(false)
-const isEditMode = ref(false)
+const detailDialogVisible = ref(false)
+const detailUser = ref(null)
 const submitting = ref(false)
 const formRef = ref(null)
 const editingUserId = ref(null)
@@ -430,6 +451,7 @@ async function handleDowngrade(row) {
     )
     await adminApi.downgradeToUser(row.id)
     ElMessage.success(`已取消 ${row.name} 的客服权限`)
+    detailDialogVisible.value = false
     await loadUsers()
   } catch (e) {
     if (e !== 'cancel') {
@@ -542,15 +564,32 @@ function openAddDialog() {
   searchUsersForUpgrade()
 }
 
-function openEditDialog(row) {
-  isEditMode.value = true
-  editingUserId.value = row.id
-  agentForm.name = row.name || ''
-  agentForm.phone = row.phone || ''
-  agentForm.password = ''
-  agentForm.email = row.email || ''
-  agentForm.department = row.department || ''
-  dialogVisible.value = true
+function openDetailDialog(row) {
+  detailUser.value = row
+  detailDialogVisible.value = true
+}
+
+async function handleRevokePermission(row, permType) {
+  const permName = permType === 'itsm' ? 'ITSM' : 'OPS'
+  try {
+    await ElMessageBox.confirm(
+      `确定要取消「${row.name}」的 ${permName} 权限吗？`,
+      '操作确认',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    )
+    const params = {}
+    params[`${permType}_access`] = false
+    await adminApi.updatePermission(row.id, params)
+    ElMessage.success(`已取消 ${row.name} 的 ${permName} 权限`)
+    await loadUsers()
+    // 更新详情用户数据
+    const updated = users.value.find(u => u.id === row.id)
+    if (updated) detailUser.value = updated
+  } catch (e) {
+    if (e !== 'cancel') {
+      // error handled by interceptor
+    }
+  }
 }
 
 function resetFormData() {
