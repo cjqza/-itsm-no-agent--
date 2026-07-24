@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 import logging
+import time
 
 from app.database import get_db
 from app.models.user import User, UserRole, UserStatus
@@ -16,14 +17,42 @@ from app.utils.auth import (
 )
 from app.api.captcha import verify_captcha
 
+# IP 登录失败追踪：{ip: [timestamps]}
+_ip_fail_store: dict[str, list[float]] = {}
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 
 # 锁定配置
 MAX_LOGIN_FAIL = 5
-LOCK_MINUTES = 10
 CAPTCHA_AFTER_FAILS = 3
+IP_FAIL_LIMIT = 10  # 同一IP登录失败次数限制
+IP_FAIL_WINDOW = 300  # IP失败计数窗口（秒）
+
+
+def _check_ip_fail_limit(client_ip: str) -> bool:
+    """检查IP登录失败次数限制，返回True表示允许，False表示超限"""
+    now = time.time()
+    if client_ip not in _ip_fail_store:
+        _ip_fail_store[client_ip] = []
+
+    # 清理过期记录
+    _ip_fail_store[client_ip] = [
+        t for t in _ip_fail_store[client_ip] if now - t < IP_FAIL_WINDOW
+    ]
+
+    if len(_ip_fail_store[client_ip]) >= IP_FAIL_LIMIT:
+        return False
+
+    return True
+
+
+def _record_ip_fail(client_ip: str):
+    """记录一次IP登录失败"""
+    if client_ip not in _ip_fail_store:
+        _ip_fail_store[client_ip] = []
+    _ip_fail_store[client_ip].append(time.time())
 
 
 class LoginRequest(BaseModel):
@@ -78,6 +107,14 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
     """登录 - 账号（专属ID或电话）+ 密码"""
     account = req.account.strip()
     test_mode = _is_test_mode(request)
+    client_ip = request.client.host if request.client else "unknown"
+
+    # IP 登录失败次数限制
+    if not test_mode and not _check_ip_fail_limit(client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail="登录尝试过于频繁，请稍后再试",
+        )
 
     # 按 login_id 或 phone 查找用户
     result = await db.execute(
@@ -87,11 +124,15 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
 
     # 统一错误信息，避免账号枚举
     if user is None or not verify_password(req.password, user.password_hash):
+        # 记录 IP 失败
+        if not test_mode:
+            _record_ip_fail(client_ip)
+
         # 用户存在时更新失败计数
         if user is not None:
             user.login_fail_count += 1
             if user.login_fail_count >= MAX_LOGIN_FAIL:
-                user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=LOCK_MINUTES)
+                user.locked_until = datetime.now(timezone.utc) + timedelta(days=365*10)  # 长期锁定，需管理员解锁
             await db.commit()
 
             # 返回是否需要验证码
@@ -110,11 +151,9 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
             locked_until = locked_until.replace(tzinfo=timezone.utc)
         now = datetime.now(timezone.utc)
         if locked_until > now:
-            remaining = (locked_until - now).total_seconds()
-            minutes_left = max(1, int(remaining / 60) + 1)
             raise HTTPException(
                 status_code=423,
-                detail=f"账号已锁定，请 {minutes_left} 分钟后重试",
+                detail="账号已锁定，请联系管理员解锁",
             )
 
     # 验证码检查（失败 >= 3 次后需要验证码，始终生效）
@@ -130,6 +169,10 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
     user.login_fail_count = 0
     user.locked_until = None
     await db.commit()
+
+    # 清除 IP 失败计数
+    if client_ip in _ip_fail_store:
+        del _ip_fail_store[client_ip]
 
     # 非激活状态不能登录
     if user.status != UserStatus.ACTIVE:
