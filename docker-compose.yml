@@ -1,0 +1,48 @@
+version: '3.8'
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/logs:/app/logs
+    environment:
+      - DB_TYPE=sqlite
+    restart: unless-stopped
+
+  frontend-client:
+    build:
+      context: ./frontend-client
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  frontend-agent:
+    build:
+      context: ./frontend-agent
+      dockerfile: Dockerfile
+    ports:
+      - "5174:80"
+    depends_on:
+      - backend
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5175:80"
+    depends_on:
+      - backend
+
+  frontend-ops:
+    build:
+      context: ./frontend-ops
+      dockerfile: Dockerfile
+    ports:
+      - "5176:80"
+    depends_on:
+      - backend

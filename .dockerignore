@@ -1,0 +1,7 @@
+node_modules
+*.db
+uploads/*
+logs/*
+.git
+.env
+__pycache__
