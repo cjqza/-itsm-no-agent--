@@ -835,6 +835,54 @@ async def upgrade_to_agent(
     }
 
 
+@router.post("/agents/downgrade")
+async def downgrade_to_user(
+    user_id: int,
+    current_user: User = Depends(require_permission("admin_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """将客服降级为普通用户"""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    if user.role != UserRole.AGENT:
+        raise HTTPException(status_code=400, detail="该用户不是客服")
+
+    # 降级为普通用户
+    user.role = UserRole.USER
+    user.is_online = 0
+    user.updated_at = datetime.now(timezone.utc)
+
+    # 移除 itsm/ops 权限
+    perm_result = await db.execute(select(Permission).where(Permission.user_id == user.id))
+    perm = perm_result.scalar_one_or_none()
+    if perm:
+        perm.itsm_access = False
+        perm.ops_access = False
+
+    db.add(AuditLog(
+        operator_id=current_user.id,
+        action="downgrade",
+        target_type="agent",
+        target_id=user.id,
+        detail=f"降级为普通用户: {user.name}",
+    ))
+    await db.commit()
+
+    return {
+        "success": True,
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "phone": user.phone,
+            "login_id": user.login_id,
+            "role": user.role.value,
+        },
+    }
+
+
 @router.post("/agents")
 async def create_agent(
     data: AgentCreate,

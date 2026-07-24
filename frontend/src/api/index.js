@@ -61,6 +61,7 @@ export const adminApi = {
   getAgents: () => api.get('/admin/agents'),
   createAgent: (data) => api.post('/admin/agents', data),
   upgradeToAgent: (userId) => api.post(`/admin/agents/upgrade?user_id=${userId}`),
+  downgradeToUser: (userId) => api.post(`/admin/agents/downgrade?user_id=${userId}`),
   updateAgent: (userId, data) => api.put(`/admin/agents/${userId}`, data),
   deleteAgent: (userId) => api.delete(`/admin/agents/${userId}`),
 

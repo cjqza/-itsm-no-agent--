@@ -82,6 +82,7 @@
                   >
                     {{ row.status === 'active' ? '禁用' : '启用' }}
                   </el-button>
+                  <el-button type="warning" size="small" link @click="handleDowngrade(row)">取消客服</el-button>
                 </template>
                 <template v-else-if="row.role === 'admin' || row.role === 'super_admin'">
                   <el-button
@@ -417,6 +418,23 @@ async function handleUpgrade() {
     // error handled by interceptor
   } finally {
     submitting.value = false
+  }
+}
+
+async function handleDowngrade(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要取消「${row.name}」的客服权限吗？取消后将变为普通用户。`,
+      '操作确认',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    )
+    await adminApi.downgradeToUser(row.id)
+    ElMessage.success(`已取消 ${row.name} 的客服权限`)
+    await loadUsers()
+  } catch (e) {
+    if (e !== 'cancel') {
+      // error handled by interceptor
+    }
   }
 }
 
