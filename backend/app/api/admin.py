@@ -108,6 +108,7 @@ async def list_users(
                 "department": u.department,
                 "status": u.status.value,
                 "is_online": u.is_online,
+                "locked_until": u.locked_until.isoformat() if u.locked_until else None,
                 "created_at": u.created_at.isoformat() if u.created_at else None,
             }
             for u in users
@@ -295,40 +296,59 @@ async def create_admin(
 
 @router.get("/permissions")
 async def list_permissions(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     keyword: Optional[str] = None,
     current_user: User = Depends(require_permission("admin_access")),
     db: AsyncSession = Depends(get_db),
 ):
-    """权限列表"""
-    query = select(Permission, User).join(User, Permission.user_id == User.id)
+    """权限列表（分页）"""
+    base_query = select(Permission, User).join(User, Permission.user_id == User.id)
     if keyword:
         safe_kw = escape_like(keyword)
-        query = query.where(
+        base_query = base_query.where(
             (User.name.like(f"%{safe_kw}%", escape="\\")) |
             (User.email.like(f"%{safe_kw}%", escape="\\")) |
             (User.login_id.like(f"%{safe_kw}%", escape="\\")) |
             (User.phone.like(f"%{safe_kw}%", escape="\\"))
         )
-    query = query.order_by(User.id)
+
+    # 计数
+    count_query = select(func.count(Permission.id)).join(User, Permission.user_id == User.id)
+    if keyword:
+        safe_kw = escape_like(keyword)
+        count_query = count_query.where(
+            (User.name.like(f"%{safe_kw}%", escape="\\")) |
+            (User.email.like(f"%{safe_kw}%", escape="\\")) |
+            (User.login_id.like(f"%{safe_kw}%", escape="\\")) |
+            (User.phone.like(f"%{safe_kw}%", escape="\\"))
+        )
+    count_result = await db.execute(count_query)
+    total = count_result.scalar() or 0
+
+    query = base_query.order_by(User.id).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
-    return [
-        {
-            "id": perm.id,
-            "user_id": perm.user_id,
-            "user_name": user.name,
-            "user_role": user.role.value,
-            "login_id": user.login_id,
-            "phone": user.phone,
-            "email": user.email,
-            "status": user.status.value,
-            "login_fail_count": user.login_fail_count or 0,
-            "locked_until": user.locked_until.isoformat() if user.locked_until else None,
-            "itsm_access": perm.itsm_access,
-            "ops_access": perm.ops_access,
-            "admin_access": perm.admin_access,
-        }
-        for perm, user in result.all()
-    ]
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": perm.id,
+                "user_id": perm.user_id,
+                "user_name": user.name,
+                "user_role": user.role.value,
+                "login_id": user.login_id,
+                "phone": user.phone,
+                "email": user.email,
+                "status": user.status.value,
+                "login_fail_count": user.login_fail_count or 0,
+                "locked_until": user.locked_until.isoformat() if user.locked_until else None,
+                "itsm_access": perm.itsm_access,
+                "ops_access": perm.ops_access,
+                "admin_access": perm.admin_access,
+            }
+            for perm, user in result.all()
+        ],
+    }
 
 
 @router.put("/permissions/{user_id}")

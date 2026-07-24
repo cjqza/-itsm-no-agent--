@@ -24,6 +24,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/itsm", tags=["ITSM"])
 
 
+@router.get("/categories")
+async def list_categories_public(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """公开的分类列表（无需 admin 权限，任何登录用户可访问）"""
+    from app.models.category import Category
+    result = await db.execute(select(Category).order_by(Category.sort_order))
+    categories = result.scalars().all()
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "description": c.description,
+            "sla_hours": c.sla_hours,
+        }
+        for c in categories
+    ]
+
+
 async def _has_itsm_access(current_user: User) -> bool:
     """内联检查用户是否拥有 itsm_access 权限"""
     if current_user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
@@ -375,6 +395,10 @@ async def transfer_ticket(
     target_user = target_result.scalar_one_or_none()
     if not target_user:
         raise HTTPException(status_code=404, detail="目标客服不存在")
+
+    # 仅允许 pending/accepted 状态转派
+    if ticket.status not in (TicketStatus.PENDING, TicketStatus.ACCEPTED):
+        raise HTTPException(status_code=400, detail="当前状态不允许转派")
 
     old_assignee_id = ticket.assignee_id
     ticket.assignee_id = data.assignee_id

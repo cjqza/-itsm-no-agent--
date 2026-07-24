@@ -341,6 +341,10 @@ class TicketService:
         if not ticket:
             raise ValueError("工单不存在")
 
+        # 只有待评价状态的工单可以评价
+        if ticket.status != TicketStatus.RESOLVED_PENDING_REVIEW:
+            raise ValueError("只有待评价状态的工单可以评价")
+
         ticket.rating = rating
         ticket.rating_comment = comment
         ticket.rated_at = datetime.now(timezone.utc)

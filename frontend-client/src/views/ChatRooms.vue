@@ -101,7 +101,10 @@ const chatInputRef = ref(null)
 const { connect, disconnect } = useWebSocket({
   onMessage: (data) => {
     if (data.type === 'chat_message' && data.room_id === selectedRoom.value?.id) {
-      messages.value.push(data.message)
+      const exists = messages.value.some(m => m.id === data.message.id)
+      if (!exists) {
+        messages.value.push(data.message)
+      }
       scrollToBottom()
       chatApi.markRead(selectedRoom.value.id).catch(() => {})
     }

@@ -76,6 +76,18 @@ async def create_chat_room(
     if not ticket:
         raise HTTPException(status_code=404, detail="工单不存在")
 
+    # 归属校验：仅工单创建者或有 itsm_access 的用户可创建聊天室
+    if ticket.creator_id != current_user.id:
+        from app.models.user import UserRole
+        from app.models.permission import Permission
+        if current_user.role not in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
+            perm_result = await db.execute(
+                select(Permission).where(Permission.user_id == current_user.id)
+            )
+            perm = perm_result.scalar_one_or_none()
+            if not perm or not perm.itsm_access:
+                raise HTTPException(status_code=403, detail="无权为此工单创建聊天室")
+
     # 检查是否已有聊天室，有则直接返回
     existing = await db.execute(
         select(ChatRoom).where(ChatRoom.ticket_id == ticket_id)
@@ -113,7 +125,7 @@ async def get_my_rooms(
         select(ChatRoom)
         .options(selectinload(ChatRoom.ticket))
         .join(Ticket, ChatRoom.ticket_id == Ticket.id)
-        .where(Ticket.creator_id == current_user.id)
+        .where((Ticket.creator_id == current_user.id) | (Ticket.assignee_id == current_user.id))
         .order_by(ChatRoom.created_at.desc())
     )
     rooms = result.scalars().all()
@@ -216,6 +228,10 @@ async def delete_chat_room(
     if room.ticket and room.ticket.creator_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权删除此聊天室")
 
+    # 仅允许已解决/待评价状态的工单删除聊天室
+    if room.ticket and room.ticket.status not in (TicketStatus.RESOLVED, TicketStatus.RESOLVED_PENDING_REVIEW):
+        raise HTTPException(status_code=400, detail="工单未完成，不能删除聊天室")
+
     # 删除已读记录
     msg_ids_result = await db.execute(
         select(ChatMessage.id).where(ChatMessage.room_id == room_id)
@@ -249,6 +265,9 @@ async def get_chat_room(
     room = result.scalar_one_or_none()
     if not room:
         raise HTTPException(status_code=404, detail="聊天室不存在")
+
+    # 归属校验：通过 _check_room_access 检查
+    await _check_room_access(room.id, current_user, db)
 
     return {
         "id": room.id,
@@ -444,6 +463,9 @@ async def get_unread_count(
     db: AsyncSession = Depends(get_db),
 ):
     """获取房间内未读消息数量"""
+    # 权限校验
+    await _check_room_access(room_id, current_user, db)
+
     # 总消息数（不含自己发的）
     total_result = await db.execute(
         select(func.count(ChatMessage.id))
@@ -467,6 +489,56 @@ async def get_unread_count(
     read_count = read_result.scalar() or 0
 
     return {"unread": max(0, total - read_count)}
+
+
+class UnreadSummaryRequest(BaseModel):
+    room_ids: list[int]
+
+
+@router.post("/unread-summary")
+async def get_unread_summary(
+    data: UnreadSummaryRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """批量查询多个房间的未读消息数"""
+    if not data.room_ids:
+        return {}
+
+    # 批量查询：每个房间的非本人消息总数
+    total_result = await db.execute(
+        select(
+            ChatMessage.room_id,
+            func.count(ChatMessage.id).label("cnt"),
+        )
+        .where(
+            ChatMessage.room_id.in_(data.room_ids),
+            ChatMessage.sender_id != current_user.id,
+        )
+        .group_by(ChatMessage.room_id)
+    )
+    total_counts = {row[0]: row[1] for row in total_result.all()}
+
+    # 批量查询：每个房间的已读消息数
+    read_result = await db.execute(
+        select(
+            ChatMessage.room_id,
+            func.count(ChatMessageRead.id).label("cnt"),
+        )
+        .select_from(ChatMessageRead)
+        .join(ChatMessage, ChatMessageRead.message_id == ChatMessage.id)
+        .where(
+            ChatMessage.room_id.in_(data.room_ids),
+            ChatMessageRead.user_id == current_user.id,
+        )
+        .group_by(ChatMessage.room_id)
+    )
+    read_counts = {row[0]: row[1] for row in read_result.all()}
+
+    return {
+        str(room_id): max(0, total_counts.get(room_id, 0) - read_counts.get(room_id, 0))
+        for room_id in data.room_ids
+    }
 
 
 # ============ WebSocket ============

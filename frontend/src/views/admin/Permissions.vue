@@ -534,11 +534,11 @@ async function handleToggleStatus(row) {
 async function handleUnlock(row) {
   try {
     await ElMessageBox.confirm(
-      `确定要解锁账号「${row.user_name}」吗？`,
+      `确定要解锁账号「${row.name}」吗？`,
       '操作确认',
       { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
     )
-    await adminApi.unlockUser(row.user_id)
+    await adminApi.unlockUser(row.id)
     ElMessage.success('账号已解锁')
     await loadUsers()
   } catch (e) {

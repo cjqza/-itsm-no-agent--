@@ -26,6 +26,10 @@ export const uploadApi = {
   },
 }
 
+export const categoryApi = {
+  getCategories: () => api.get('/itsm/categories'),
+}
+
 export const chatApi = {
   createRoom: (ticketId) => api.post(`/chat/rooms/${ticketId}`),
   getRoom: (ticketId) => api.get(`/chat/rooms/${ticketId}`),

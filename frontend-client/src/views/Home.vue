@@ -144,10 +144,10 @@
 </template>
 
 <script setup>
-import { ref, nextTick, watch } from 'vue'
+import { ref, nextTick, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
-import { ticketApi, chatApi, uploadApi } from '@/api'
+import { ticketApi, chatApi, uploadApi, categoryApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import { Paperclip, Document, Delete } from '@element-plus/icons-vue'
 
@@ -210,12 +210,34 @@ const categories = [
 ]
 
 // 问题分类选项（转人工时显示）
-const problemCategories = [
+const defaultProblemCategories = [
   { id: 1, name: '桌面问题', icon: '🖥️', desc: '系统故障、蓝屏、无法开机等' },
   { id: 3, name: '网络问题', icon: '🌐', desc: '网络连接、WiFi、VPN等' },
   { id: 6, name: '软件问题', icon: '💻', desc: '软件安装、更新、邮箱等' },
   { id: 7, name: '其他问题', icon: '📋', desc: '账号权限、密码重置、咨询等' },
 ]
+const problemCategories = ref(defaultProblemCategories)
+
+const categoryIcons = { '桌面问题': '🖥️', '网络问题': '🌐', '软件问题': '💻', '其他问题': '📋', '硬件故障': '🖨️', '账号权限': '🔑', '邮箱问题': '📧', '操作系统': '💻' }
+const categoryDescs = { '桌面问题': '系统故障、蓝屏、无法开机等', '网络问题': '网络连接、WiFi、VPN等', '软件问题': '软件安装、更新、邮箱等', '其他问题': '账号权限、密码重置、咨询等' }
+
+async function loadCategories() {
+  try {
+    const cats = await categoryApi.getCategories()
+    if (Array.isArray(cats) && cats.length > 0) {
+      problemCategories.value = cats.map(c => ({
+        id: c.id,
+        name: c.name,
+        icon: categoryIcons[c.name] || '📋',
+        desc: categoryDescs[c.name] || c.description || c.name,
+      }))
+    }
+  } catch {
+    // 普通用户无 admin 权限，使用默认列表
+  }
+}
+
+onMounted(loadCategories)
 
 // 机器人回复逻辑
 const botReplies = {

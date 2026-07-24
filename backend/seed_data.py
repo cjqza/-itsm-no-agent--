@@ -152,7 +152,7 @@ async def seed():
                 sla_deadline=datetime.now(timezone.utc) + timedelta(hours=categories[t["cat"]].sla_hours),
                 sla_status=SLAStatus.GREEN,
                 accepted_at=datetime.now(timezone.utc) - timedelta(hours=1) if t["agent"] else None,
-                resolved_at=datetime.now(timezone.utc) - timedelta(minutes=30) if t["status"] == TicketStatus.RESOLVED else None,
+                resolved_at=datetime.now(timezone.utc) - timedelta(minutes=30) if t["status"] in (TicketStatus.RESOLVED, TicketStatus.RESOLVED_PENDING_REVIEW) else None,
                 rating=5 if t["status"] == TicketStatus.RESOLVED else None,
                 rating_comment="非常满意" if t["status"] == TicketStatus.RESOLVED else None,
             )

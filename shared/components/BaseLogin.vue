@@ -234,7 +234,7 @@ async function handleRegister() {
         captcha_id: regCaptchaId.value,
         captcha_text: regForm.captcha_text,
       })
-      ElMessage.success('申请已提交，等待管理员审批')
+      ElMessage.success('注册成功')
       showRegisterDialog.value = false
       emit('register-success')
     } catch (e) {
