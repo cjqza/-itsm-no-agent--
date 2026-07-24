@@ -84,6 +84,13 @@
         <el-form-item label="确认密码" prop="confirmPassword">
           <el-input v-model="regForm.confirmPassword" type="password" placeholder="再次输入密码" show-password maxlength="128" prefix-icon="Lock" />
         </el-form-item>
+        <el-form-item label="验证码" prop="captcha_text">
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-input v-model="regForm.captcha_text" placeholder="请输入验证码" style="flex: 1" />
+            <img v-if="regCaptchaImg" :src="regCaptchaImg" @click="fetchRegCaptcha" style="height: 36px; cursor: pointer; border-radius: 4px; border: 1px solid #e2e8f0" alt="验证码" />
+            <span v-else @click="fetchRegCaptcha" style="cursor: pointer; color: #64748b; white-space: nowrap; line-height: 36px">获取验证码</span>
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showRegisterDialog = false">取消</el-button>
@@ -167,7 +174,7 @@ async function handleLogin() {
 const showRegisterDialog = ref(false)
 const regLoading = ref(false)
 const regFormRef = ref(null)
-const regForm = reactive({ name: '', phone: '', password: '', confirmPassword: '' })
+const regForm = reactive({ name: '', phone: '', password: '', confirmPassword: '', captcha_text: '' })
 
 const validateConfirm = (rule, value, callback) => {
   if (value !== regForm.password) callback(new Error('两次密码不一致'))
@@ -188,6 +195,19 @@ const regRules = {
     { required: true, message: '请确认密码', trigger: 'blur' },
     { validator: validateConfirm, trigger: 'blur' },
   ],
+  captcha_text: [{ required: true, message: '请输入验证码', trigger: 'blur' }],
+}
+
+// 注册验证码
+const regCaptchaImg = ref('')
+const regCaptchaId = ref('')
+
+async function fetchRegCaptcha() {
+  try {
+    const res = await props.captchaApi()
+    regCaptchaImg.value = res.image
+    regCaptchaId.value = res.captcha_id
+  } catch (e) { console.error('获取验证码失败', e) }
 }
 
 function openRegisterDialog() {
@@ -195,7 +215,9 @@ function openRegisterDialog() {
   regForm.phone = ''
   regForm.password = ''
   regForm.confirmPassword = ''
+  regForm.captcha_text = ''
   showRegisterDialog.value = true
+  fetchRegCaptcha()
 }
 
 async function handleRegister() {
@@ -205,11 +227,19 @@ async function handleRegister() {
     if (!props.registerHandler) { ElMessage.error('注册功能未配置'); return }
     regLoading.value = true
     try {
-      await props.registerHandler({ name: regForm.name, phone: regForm.phone, password: regForm.password })
+      await props.registerHandler({
+        name: regForm.name,
+        phone: regForm.phone,
+        password: regForm.password,
+        captcha_id: regCaptchaId.value,
+        captcha_text: regForm.captcha_text,
+      })
       ElMessage.success('申请已提交，等待管理员审批')
       showRegisterDialog.value = false
       emit('register-success')
     } catch (e) {
+      fetchRegCaptcha()
+      regForm.captcha_text = ''
       ElMessage.error(e.response?.data?.detail || '注册失败')
     } finally {
       regLoading.value = false

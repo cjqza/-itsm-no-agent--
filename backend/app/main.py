@@ -218,9 +218,9 @@ async def rate_limit_middleware(request: Request, call_next):
                 status_code=429,
                 content={"detail": "请求过于频繁，请稍后再试"},
             )
-    # 注册接口: 3次/小时/IP
+    # 注册接口: 10次/小时/IP
     elif "/auth/register" in path:
-        if not await _check_rate_limit(client_ip, path, limit=3, window=3600):
+        if not await _check_rate_limit(client_ip, path, limit=10, window=3600):
             logger.warning(f"限流: {client_ip} 注册接口请求过于频繁")
             return JSONResponse(
                 status_code=429,
