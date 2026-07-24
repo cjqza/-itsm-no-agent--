@@ -115,7 +115,8 @@ async function loadMessages() {
   try {
     const room = await chatApi.getRoom(ticketId)
     currentRoomId.value = room.id
-    messages.value = await chatApi.getMessages(room.id)
+    const msgRes = await chatApi.getMessages(room.id)
+    messages.value = msgRes.items || msgRes
     scrollToBottom()
     connectWebSocket()
   } catch (e) {

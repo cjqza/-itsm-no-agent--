@@ -208,7 +208,8 @@ async function loadAll() {
     // 加载聊天室
     try {
       chatRoom.value = await chatApi.getRoom(ticketId)
-      chatMessages.value = await chatApi.getMessages(chatRoom.value.id)
+      const msgRes = await chatApi.getMessages(chatRoom.value.id)
+      chatMessages.value = msgRes.items || msgRes
       scrollToBottom()
       connectChatWs()
     } catch (e) { chatRoom.value = null }

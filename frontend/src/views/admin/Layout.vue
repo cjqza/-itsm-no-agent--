@@ -1,6 +1,7 @@
 <template>
+  <div v-if="isMobile && !sidebarCollapsed" class="sidebar-overlay" @click="sidebarCollapsed = true"></div>
   <el-container class="layout-container">
-    <el-aside width="220px" class="sidebar">
+    <el-aside :width="sidebarWidth" class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-header">
         <div class="logo-wrapper">
           <div class="logo-icon">⚙️</div>
@@ -18,6 +19,7 @@
         <el-menu-item index="/admin"><el-icon><Key /></el-icon><span>权限管理</span></el-menu-item>
         <el-menu-item index="/admin/categories"><el-icon><Grid /></el-icon><span>分类配置</span></el-menu-item>
         <el-menu-item index="/admin/settings"><el-icon><Setting /></el-icon><span>系统设置</span></el-menu-item>
+        <el-menu-item index="/admin/audit-logs"><el-icon><Document /></el-icon><span>操作日志</span></el-menu-item>
       </el-menu>
       <div class="sidebar-footer">
         <div class="user-info">
@@ -35,10 +37,14 @@
     <el-container>
       <el-header class="header">
         <div class="header-left">
+          <el-button text class="menu-toggle" @click="sidebarCollapsed = !sidebarCollapsed">
+            <el-icon :size="20"><Fold v-if="!sidebarCollapsed" /><Expand v-else /></el-icon>
+          </el-button>
           <el-breadcrumb separator="/">
             <el-breadcrumb-item :to="{ path: '/admin' }">后台管理</el-breadcrumb-item>
             <el-breadcrumb-item v-if="route.name === 'Categories'">分类配置</el-breadcrumb-item>
             <el-breadcrumb-item v-if="route.name === 'Settings'">系统设置</el-breadcrumb-item>
+            <el-breadcrumb-item v-if="route.name === 'AdminAuditLogs'">操作日志</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
         <div class="header-right">
@@ -64,15 +70,28 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
-import { Key, UserFilled, Grid, Setting, ArrowDown, SwitchButton } from '@element-plus/icons-vue'
+import { Key, UserFilled, Grid, Setting, ArrowDown, SwitchButton, Document, Fold, Expand } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const activeMenu = computed(() => route.path)
+const sidebarCollapsed = ref(false)
+const isMobile = ref(false)
+const sidebarWidth = computed(() => {
+  if (isMobile.value) return sidebarCollapsed.value ? '0px' : '220px'
+  return sidebarCollapsed.value ? '64px' : '220px'
+})
+
+function checkMobile() {
+  isMobile.value = window.innerWidth <= 768
+  if (isMobile.value) sidebarCollapsed.value = true
+}
+onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile) })
+onUnmounted(() => { window.removeEventListener('resize', checkMobile) })
 function handleLogout() { userStore.logout(); router.push('/login') }
 function handleCmd(cmd) { if (cmd === 'logout') { userStore.logout(); router.push('/login') } }
 </script>
@@ -196,4 +215,30 @@ function handleCmd(cmd) { if (cmd === 'logout') { userStore.logout(); router.pus
 }
 
 .main-content { background: #f0f2f5; padding: 20px; overflow-y: auto; }
+
+.menu-toggle { display: none; margin-right: 8px; }
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 99;
+}
+
+@media (max-width: 768px) {
+  .menu-toggle { display: inline-flex; }
+  .sidebar {
+    position: fixed;
+    z-index: 100;
+    height: 100vh;
+    transition: width 0.3s;
+  }
+  .sidebar.collapsed { width: 0 !important; overflow: hidden; }
+  .main-content { padding: 12px; }
+}
+
+@media (max-width: 480px) {
+  .header { padding: 0 12px; }
+  .main-content { padding: 8px; }
+}
 </style>

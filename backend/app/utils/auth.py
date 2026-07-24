@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from time import time
 from typing import Optional
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
@@ -86,6 +87,22 @@ async def generate_next_login_id(db: "AsyncSession") -> str:
     return f"U{max_seq + 1:05d}"
 
 
+# 权限缓存：{ user_id: (itsm_access, ops_access, admin_access, expire_ts) }
+_perm_cache: dict[int, tuple[bool, bool, bool, float]] = {}
+_PERM_CACHE_TTL = 60  # 秒
+_PERM_CACHE_MAX = 1000
+
+
+def _invalidate_perm_cache(user_id: int) -> None:
+    """清除指定用户的权限缓存"""
+    _perm_cache.pop(user_id, None)
+
+
+def _invalidate_all_perm_cache() -> None:
+    """清空全部权限缓存"""
+    _perm_cache.clear()
+
+
 def require_permission(permission_field: str):
     """权限检查装饰器工厂"""
     async def check_permission(
@@ -98,21 +115,41 @@ def require_permission(permission_field: str):
         if current_user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
             return current_user
 
-        # 普通用户查Permission表
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(Permission).where(Permission.user_id == current_user.id)
-            )
-            perm = result.scalar_one_or_none()
+        uid = current_user.id
+        now = time()
+
+        # 检查缓存
+        cached = _perm_cache.get(uid)
+        if cached and cached[3] > now:
+            itsm, ops, admin = cached[0], cached[1], cached[2]
+        else:
+            # 查 DB
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(Permission).where(Permission.user_id == uid)
+                )
+                perm = result.scalar_one_or_none()
 
             if perm is None:
-                logger.warning(f"PERM DENIED: user={current_user.id} ({current_user.name}), no permission record")
+                logger.warning(f"PERM DENIED: user={uid} ({current_user.name}), no permission record")
                 raise HTTPException(status_code=403, detail="没有权限，请先申请权限")
 
-            perm_value = getattr(perm, permission_field, False)
-            if not perm_value:
-                logger.warning(f"PERM DENIED: user={current_user.id} ({current_user.name}), {permission_field}={perm_value}")
-                raise HTTPException(status_code=403, detail="没有访问权限")
+            itsm = bool(perm.itsm_access)
+            ops = bool(perm.ops_access)
+            admin = bool(perm.admin_access)
+
+            # 防内存泄漏：缓存过大时清空
+            if len(_perm_cache) >= _PERM_CACHE_MAX:
+                _perm_cache.clear()
+
+            _perm_cache[uid] = (itsm, ops, admin, now + _PERM_CACHE_TTL)
+
+        # 校验对应字段
+        field_map = {"itsm_access": itsm, "ops_access": ops, "admin_access": admin}
+        perm_value = field_map.get(permission_field, False)
+        if not perm_value:
+            logger.warning(f"PERM DENIED: user={uid} ({current_user.name}), {permission_field}={perm_value}")
+            raise HTTPException(status_code=403, detail="没有访问权限")
 
         return current_user
 

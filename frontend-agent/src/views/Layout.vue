@@ -1,7 +1,8 @@
 <template>
+  <div v-if="isMobile && !sidebarCollapsed" class="sidebar-overlay" @click="sidebarCollapsed = true"></div>
   <el-container class="layout">
     <!-- 深色侧边栏 -->
-    <el-aside width="220px" class="sidebar">
+    <el-aside :width="sidebarWidth" class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-header">
         <div class="logo-wrapper">
           <div class="logo-icon">🖥️</div>
@@ -47,6 +48,9 @@
     <el-container>
       <el-header class="header">
         <div class="header-left">
+          <el-button text class="menu-toggle" @click="sidebarCollapsed = !sidebarCollapsed">
+            <el-icon :size="20"><Fold v-if="!sidebarCollapsed" /><Expand v-else /></el-icon>
+          </el-button>
           <el-breadcrumb separator="/">
             <el-breadcrumb-item :to="{ path: '/' }">工作台</el-breadcrumb-item>
             <el-breadcrumb-item v-if="route.name === 'TicketList'">服务请求</el-breadcrumb-item>
@@ -70,21 +74,35 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ticketApi } from '@/api'
-import { ChatDotRound, HomeFilled, Tickets, SwitchButton, Bell } from '@element-plus/icons-vue'
+import { ChatDotRound, HomeFilled, Tickets, SwitchButton, Bell, Fold, Expand } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
 const store = useUserStore()
 const pendingCount = ref(0)
+const sidebarCollapsed = ref(false)
+const isMobile = ref(false)
+const sidebarWidth = computed(() => {
+  if (isMobile.value) return sidebarCollapsed.value ? '0px' : '220px'
+  return sidebarCollapsed.value ? '64px' : '220px'
+})
+
+function checkMobile() {
+  isMobile.value = window.innerWidth <= 768
+  if (isMobile.value) sidebarCollapsed.value = true
+}
+onUnmounted(() => { window.removeEventListener('resize', checkMobile) })
 
 const activeMenu = computed(() => route.path)
 
 onMounted(async () => {
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
   try {
     const dash = await ticketApi.dashboard()
     pendingCount.value = dash.pending_count || 0
@@ -194,5 +212,31 @@ function handleLogout() { store.logout(); router.push('/login') }
   background: #f0f2f5;
   padding: 20px;
   overflow-y: auto;
+}
+
+.menu-toggle { display: none; margin-right: 8px; }
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 99;
+}
+
+@media (max-width: 768px) {
+  .menu-toggle { display: inline-flex; }
+  .sidebar {
+    position: fixed;
+    z-index: 100;
+    height: 100vh;
+    transition: width 0.3s;
+  }
+  .sidebar.collapsed { width: 0 !important; overflow: hidden; }
+  .main { padding: 12px; }
+}
+
+@media (max-width: 480px) {
+  .header { padding: 0 12px; }
+  .main { padding: 8px; }
 }
 </style>

@@ -18,7 +18,7 @@ from app.schemas.category import (
     GenericItemCreate, GenericItemUpdate, GenericItemOut,
 )
 from app.models.audit_log import AuditLog
-from app.utils.auth import require_permission, get_current_user, generate_next_login_id, hash_password
+from app.utils.auth import require_permission, get_current_user, generate_next_login_id, hash_password, _invalidate_perm_cache
 
 router = APIRouter(prefix="/api/admin", tags=["后台管理"])
 
@@ -345,6 +345,7 @@ async def update_permission(
         detail=f"itsm:{itsm_access}, ops:{ops_access}, admin:{admin_access}",
     ))
     await db.commit()
+    _invalidate_perm_cache(user_id)
     return {"success": True}
 
 
@@ -453,6 +454,8 @@ async def review_permission_request(
         detail=f"审批权限申请 {req.request_type}",
     ))
     await db.commit()
+    if action == "approved":
+        _invalidate_perm_cache(req.user_id)
     return {"success": True}
 
 
@@ -520,6 +523,7 @@ async def review_account_request(
             db.add(Permission(user_id=user.id))
 
         await db.commit()
+        _invalidate_perm_cache(user.id)
         return {"success": True, "action": "approve", "login_id": user.login_id}
     else:
         user.status = UserStatus.INACTIVE

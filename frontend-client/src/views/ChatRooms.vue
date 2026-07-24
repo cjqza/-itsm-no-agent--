@@ -141,7 +141,8 @@ async function selectRoom(room) {
   selectedRoom.value = room
   messages.value = []
   try {
-    messages.value = await chatApi.getMessages(room.id)
+    const msgRes = await chatApi.getMessages(room.id)
+    messages.value = msgRes.items || msgRes
     scrollToBottom()
     // 标记已读
     await chatApi.markRead(room.id)

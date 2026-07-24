@@ -244,4 +244,18 @@ function formatTime(t) { return t ? dayjs(t).format('MM-DD HH:mm') : '' }
 .ticket-title { font-size: 13px; color: #1e293b; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ticket-meta { font-size: 12px; color: #94a3b8; display: flex; gap: 12px; margin-top: 4px; }
 .sla-progress { width: 120px; margin-top: 4px; }
+
+@media (max-width: 768px) {
+  .dashboard :deep(.el-col-12) {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+  .panel { height: auto; max-height: 400px; }
+}
+
+@media (max-width: 480px) {
+  .panel-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .ticket-item { padding: 10px 12px; }
+  .sla-progress { width: 80px; }
+}
 </style>

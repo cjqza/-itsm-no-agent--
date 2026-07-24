@@ -100,6 +100,9 @@ export const adminApi = {
   // 账号审批
   getAccountRequests: (status) => api.get('/admin/account-requests', { params: { status } }),
   reviewAccountRequest: (userId, action) => api.put(`/admin/account-requests/${userId}`, null, { params: { action } }),
+
+  // 操作日志
+  getAuditLogs: (params) => api.get('/admin/audit-logs', { params }),
 }
 
 export default api

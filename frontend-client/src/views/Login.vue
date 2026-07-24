@@ -278,7 +278,8 @@ async function handleResetPassword() {
   padding: 48px 40px 32px;
   text-align: center;
   box-shadow: 0 25px 80px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.1);
-  width: 420px;
+  max-width: 420px;
+  width: 90%;
   position: relative;
   z-index: 1;
   backdrop-filter: blur(20px);
@@ -349,4 +350,13 @@ h1 {
   gap: 8px;
 }
 .copyright .divider { color: #cbd5e1; }
+
+@media (max-width: 480px) {
+  .login-card { padding: 32px 20px 24px; border-radius: 16px; }
+  h1 { font-size: 20px; }
+  .logo-wrapper { width: 64px; height: 64px; border-radius: 16px; }
+  .logo { font-size: 32px; }
+  .login-footer { flex-direction: column; gap: 8px; }
+  .login-footer .divider { display: none; }
+}
 </style>

@@ -336,4 +336,29 @@ async function handleExport() {
   border-radius: 12px 12px 0 0;
 }
 .chart-title { font-weight: 600; font-size: 14px; color: #1e293b; }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .header-actions { width: 100%; }
+  .stat-cards :deep(.el-col-6) {
+    flex: 0 0 50%;
+    max-width: 50%;
+    margin-bottom: 12px;
+  }
+  .ops-overview :deep(.el-col-12) {
+    flex: 0 0 100%;
+    max-width: 100%;
+    margin-bottom: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stat-cards :deep(.el-col-6) {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+  .stat-cards .stat-card { padding: 16px 14px; }
+  .stat-icon { font-size: 28px; }
+  .stat-value { font-size: 24px; }
+}
 </style>

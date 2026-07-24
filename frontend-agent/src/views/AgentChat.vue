@@ -172,7 +172,8 @@ async function selectTicket(ticket) {
     chatRoom.value = room
 
     // 获取消息
-    messages.value = await chatApi.getMessages(room.id)
+    const msgRes = await chatApi.getMessages(room.id)
+    messages.value = msgRes.items || msgRes
     scrollToBottom()
 
     // 标记消息为已读

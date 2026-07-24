@@ -1,8 +1,8 @@
 """聊天API"""
 import asyncio
 import json
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from sqlalchemy import select, delete as sa_delete
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from sqlalchemy import select, func, delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
@@ -72,8 +72,6 @@ async def get_my_rooms(
     db: AsyncSession = Depends(get_db),
 ):
     """获取当前用户的所有聊天室（含工单信息和最后一条消息）"""
-    from sqlalchemy import func
-
     # 查询用户相关的工单对应的聊天室
     result = await db.execute(
         select(ChatRoom)
@@ -227,29 +225,45 @@ async def get_chat_room(
 @router.get("/rooms/{room_id}/messages")
 async def get_messages(
     room_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取聊天记录"""
+    """获取聊天记录（分页）"""
+    # 总数
+    count_result = await db.execute(
+        select(func.count(ChatMessage.id)).where(ChatMessage.room_id == room_id)
+    )
+    total = count_result.scalar() or 0
+
+    # 分页查询
     result = await db.execute(
         select(ChatMessage)
         .options(selectinload(ChatMessage.sender))
         .where(ChatMessage.room_id == room_id)
         .order_by(ChatMessage.created_at)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     messages = result.scalars().all()
 
-    return [
-        {
-            "id": msg.id,
-            "sender_id": msg.sender_id,
-            "sender_name": msg.sender.name if msg.sender else "系统",
-            "content": msg.content,
-            "msg_type": msg.msg_type.value,
-            "created_at": msg.created_at.isoformat() if msg.created_at else None,
-        }
-        for msg in messages
-    ]
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [
+            {
+                "id": msg.id,
+                "sender_id": msg.sender_id,
+                "sender_name": msg.sender.name if msg.sender else "系统",
+                "content": msg.content,
+                "msg_type": msg.msg_type.value,
+                "created_at": msg.created_at.isoformat() if msg.created_at else None,
+            }
+            for msg in messages
+        ],
+    }
 
 
 @router.post("/rooms/{room_id}/messages")
@@ -394,8 +408,6 @@ async def get_unread_count(
     db: AsyncSession = Depends(get_db),
 ):
     """获取房间内未读消息数量"""
-    from sqlalchemy import func
-
     # 总消息数（不含自己发的）
     total_result = await db.execute(
         select(func.count(ChatMessage.id))
