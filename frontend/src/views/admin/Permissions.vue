@@ -177,47 +177,80 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 新增/编辑客服对话框 -->
+    <!-- 升级为客服对话框 -->
     <el-dialog
       v-model="dialogVisible"
-      :title="isEditMode ? '编辑客服' : '新增客服'"
-      width="480px"
+      :title="isEditMode ? '编辑客服' : '升级为客服'"
+      width="520px"
       :close-on-click-modal="false"
       @closed="resetForm"
     >
-      <el-form
-        ref="formRef"
-        :model="agentForm"
-        :rules="formRules"
-        label-width="80px"
-        label-position="right"
-      >
-        <el-form-item label="姓名" prop="name">
-          <el-input v-model="agentForm.name" placeholder="请输入姓名" />
-        </el-form-item>
-        <el-form-item label="手机号" prop="phone">
-          <el-input v-model="agentForm.phone" placeholder="请输入手机号" />
-        </el-form-item>
-        <el-form-item v-if="!isEditMode" label="密码" prop="password">
+      <template v-if="!isEditMode">
+        <!-- 选择已有用户升级 -->
+        <div style="margin-bottom: 16px;">
           <el-input
-            v-model="agentForm.password"
-            type="password"
-            show-password
-            placeholder="请输入密码"
-          />
-        </el-form-item>
-        <el-form-item label="邮箱">
-          <el-input v-model="agentForm.email" placeholder="请输入邮箱（可选）" />
-        </el-form-item>
-        <el-form-item label="部门">
-          <el-input v-model="agentForm.department" placeholder="请输入部门（可选）" />
-        </el-form-item>
-      </el-form>
+            v-model="upgradeSearch"
+            placeholder="搜索用户姓名、账号、手机号"
+            clearable
+            @input="searchUsersForUpgrade"
+          >
+            <template #prefix><el-icon><Search /></el-icon></template>
+          </el-input>
+        </div>
+        <el-table
+          :data="upgradeUsers"
+          max-height="300"
+          highlight-current-row
+          @current-change="handleUpgradeUserSelect"
+          style="width: 100%"
+          v-loading="upgradeLoading"
+        >
+          <el-table-column prop="login_id" label="账号" width="100" />
+          <el-table-column prop="name" label="姓名" width="100" />
+          <el-table-column prop="phone" label="手机号" width="130" />
+          <el-table-column prop="role" label="角色" width="80">
+            <template #default="{ row }">
+              <el-tag size="small">{{ roleText(row.role) }}</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div v-if="selectedUpgradeUser" style="margin-top: 12px; padding: 8px; background: #f0f9ff; border-radius: 4px;">
+          已选择：<strong>{{ selectedUpgradeUser.name }}</strong>（{{ selectedUpgradeUser.login_id }}）
+        </div>
+      </template>
+      <template v-else>
+        <!-- 编辑模式 -->
+        <el-form
+          ref="formRef"
+          :model="agentForm"
+          :rules="formRules"
+          label-width="80px"
+          label-position="right"
+        >
+          <el-form-item label="姓名" prop="name">
+            <el-input v-model="agentForm.name" placeholder="请输入姓名" />
+          </el-form-item>
+          <el-form-item label="手机号" prop="phone">
+            <el-input v-model="agentForm.phone" placeholder="请输入手机号" />
+          </el-form-item>
+          <el-form-item label="邮箱">
+            <el-input v-model="agentForm.email" placeholder="请输入邮箱（可选）" />
+          </el-form-item>
+          <el-form-item label="部门">
+            <el-input v-model="agentForm.department" placeholder="请输入部门（可选）" />
+          </el-form-item>
+        </el-form>
+      </template>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          {{ isEditMode ? '保存' : '创建' }}
-        </el-button>
+        <el-button
+          v-if="!isEditMode"
+          type="primary"
+          :loading="submitting"
+          :disabled="!selectedUpgradeUser"
+          @click="handleUpgrade"
+        >升级为客服</el-button>
+        <el-button v-else type="primary" :loading="submitting" @click="handleSubmit">保存</el-button>
       </template>
     </el-dialog>
 
@@ -343,7 +376,48 @@ const agentForm = reactive({
 const formRules = {
   name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   phone: [{ required: true, message: '请输入手机号', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+}
+
+// ===== 升级为客服 =====
+const upgradeUsers = ref([])
+const upgradeLoading = ref(false)
+const upgradeSearch = ref('')
+const selectedUpgradeUser = ref(null)
+
+async function searchUsersForUpgrade() {
+  upgradeLoading.value = true
+  try {
+    const params = { role: 'user', page_size: 50 }
+    if (upgradeSearch.value.trim()) {
+      params.keyword = upgradeSearch.value.trim()
+    }
+    const res = await adminApi.getUsers(params)
+    upgradeUsers.value = res?.items || []
+  } finally {
+    upgradeLoading.value = false
+  }
+}
+
+function handleUpgradeUserSelect(row) {
+  selectedUpgradeUser.value = row
+}
+
+async function handleUpgrade() {
+  if (!selectedUpgradeUser.value) {
+    ElMessage.warning('请选择要升级的用户')
+    return
+  }
+  submitting.value = true
+  try {
+    await adminApi.upgradeToAgent(selectedUpgradeUser.value.id)
+    ElMessage.success(`已将 ${selectedUpgradeUser.value.name} 升级为客服`)
+    dialogVisible.value = false
+    await loadUsers()
+  } catch (e) {
+    // error handled by interceptor
+  } finally {
+    submitting.value = false
+  }
 }
 
 // ===== 新增管理员 =====
@@ -443,7 +517,11 @@ function openAddDialog() {
   isEditMode.value = false
   editingUserId.value = null
   resetFormData()
+  upgradeSearch.value = ''
+  selectedUpgradeUser.value = null
+  upgradeUsers.value = []
   dialogVisible.value = true
+  searchUsersForUpgrade()
 }
 
 function openEditDialog(row) {

@@ -782,13 +782,66 @@ class AgentUpdate(BaseModel):
 
 # ============ 客服增删改查 ============
 
+@router.post("/agents/upgrade")
+async def upgrade_to_agent(
+    user_id: int,
+    current_user: User = Depends(require_permission("admin_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """将已有用户升级为客服"""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    if user.role == UserRole.AGENT:
+        raise HTTPException(status_code=400, detail="该用户已是客服")
+
+    if user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
+        raise HTTPException(status_code=400, detail="不能将管理员降级为客服")
+
+    # 升级为客服
+    user.role = UserRole.AGENT
+    user.is_online = 1
+    user.updated_at = datetime.now(timezone.utc)
+
+    # 确保有权限记录
+    perm_result = await db.execute(select(Permission).where(Permission.user_id == user.id))
+    perm = perm_result.scalar_one_or_none()
+    if perm:
+        perm.itsm_access = True
+        perm.ops_access = True
+    else:
+        db.add(Permission(user_id=user.id, itsm_access=True, ops_access=True))
+
+    db.add(AuditLog(
+        operator_id=current_user.id,
+        action="upgrade",
+        target_type="agent",
+        target_id=user.id,
+        detail=f"升级为客服: {user.name}",
+    ))
+    await db.commit()
+
+    return {
+        "success": True,
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "phone": user.phone,
+            "login_id": user.login_id,
+            "role": user.role.value,
+        },
+    }
+
+
 @router.post("/agents")
 async def create_agent(
     data: AgentCreate,
     current_user: User = Depends(require_permission("admin_access")),
     db: AsyncSession = Depends(get_db),
 ):
-    """新增客服"""
+    """新增客服（直接创建新账号）"""
     # 检查手机号是否已存在
     existing = await db.execute(select(User).where(User.phone == data.phone))
     if existing.scalar_one_or_none():
