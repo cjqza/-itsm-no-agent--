@@ -2,6 +2,13 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-24] P2 #11 前端公共层抽取：消除 250 行重复代码
+- **变更**：新建 `shared/` 目录作为四端前端共享层，包含 4 个共享模块：`shared/utils/status.js`（statusType/statusText/priorityType/slaColor 等 7 个状态工具函数）、`shared/utils/format.js`（formatTime/formatShortTime/formatMsgTime 3 个时间格式化函数）、`shared/api/request.js`（createApiClient 工厂，统一封装 axios 拦截器与错误处理）、`shared/index.js`（统一导出入口）。四端 `vite.config.js` 新增 `@shared` 路径别名；四端 `api/index.js` 从各自重复的 axios 拦截器逻辑（共约 100 行）改为调用 `createApiClient`（各 4 行）；9 个 .vue 组件删除本地重复的状态/格式化函数（约 150 行），改用 shared 导入。共 21 个文件变更（+162 / -182），净减少约 20 行的同时消除 250 行重复代码。
+- **原因**：四端前端存在大量重复的 API 拦截器、状态映射、时间格式化代码，维护时需同步修改四处，容易遗漏导致不一致。
+- **影响**：`shared/api/request.js`、`shared/utils/status.js`、`shared/utils/format.js`、`shared/index.js`（新建）；四端 `vite.config.js`（@shared alias）；四端 `api/index.js`（改用 createApiClient）；`frontend-agent/src/views/AgentChat.vue`、`Dashboard.vue`、`TicketDetail.vue`、`TicketList.vue`；`frontend-client/src/views/Chat.vue`、`ChatRooms.vue`、`MyTickets.vue`；`frontend-ops/src/views/TicketHistory.vue`；`frontend/src/views/admin/AuditLogs.vue`（删除重复函数改用 shared）。纯前端重构，后端无变更。
+- **提交**：`91a3ad9`
+- **测试**：73/73 全部通过。
+
 ## [2026-07-24] P2 优化：聊天分页、Permission 缓存、审计日志前端页、移动端适配
 - **变更**：四项 P2 优化打包交付。(1) 聊天消息分页：`chat.py` 的 `get_messages` 从一次性返回全部消息改为分页返回 `{total, page, page_size, items}`，四端聊天调用方（AgentChat / TicketDetail / Chat / ChatRooms）适配新返回格式。(2) Permission 内存缓存：`auth.py` 的 `require_permission` 增加 60 秒 TTL 内存缓存，避免每次请求都查库；`admin.py` 权限变更时自动清除对应用户缓存，保证一致性。(3) 审计日志前端页面：新建 `AuditLogs.vue`（筛选条件 + 分页表格 + 操作类型/目标类型标签展示），admin 前端 Layout 新增「操作日志」菜单项，路由同步注册。(4) 移动端适配：5 个关键页面通过 `@media` 断点（768px/480px）实现响应式——Login.vue 卡片宽度自适应、Dashboard.vue 四象限小屏单列、Layout.vue 侧边栏折叠+汉堡按钮+遮罩层、Overview.vue 统计卡片小屏 2 列/1 列。
 - **原因**：聊天消息无分页导致长对话加载缓慢；权限校验每次查库增加数据库压力；审计日志虽有后端接口但缺少前端管理页面；移动端访问布局错乱无法正常使用。

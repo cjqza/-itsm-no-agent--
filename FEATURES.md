@@ -306,7 +306,16 @@
 - [x] 后台定时检查（每分钟）
 - [x] SLA 预警列表
 
-### 6.4 其他
+### 6.4 前端共享层（shared/）
+- [x] shared/utils/status.js（7 个状态/优先级/SLA 工具函数）
+- [x] shared/utils/format.js（3 个时间格式化函数）
+- [x] shared/api/request.js（createApiClient 工厂，统一封装 axios 拦截器）
+- [x] shared/index.js（统一导出入口）
+- [x] 四端 vite.config.js 注册 @shared 路径别名
+- [x] 四端 api/index.js 改用 createApiClient（消除 100 行重复拦截器）
+- [x] 9 个组件删除本地重复函数改用 shared 导入（消除 150 行重复）
+
+### 6.5 其他
 - [x] API 限流（登录 5/min，注册 3/hour，验证码 10/min，其他 120/min）
 - [x] 文件上传（图片/文档/文本/压缩包，10MB，已移除 text/html/js/css 危险类型）
 - [x] 快捷回复模板（数据库持久化，支持 CRUD + 分类筛选 + 种子数据）
