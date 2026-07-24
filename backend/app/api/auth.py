@@ -123,7 +123,7 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
             raise HTTPException(status_code=400, detail="请输入验证码")
         if not test_mode and not req.captcha_text:
             raise HTTPException(status_code=400, detail="请输入验证码")
-        if not verify_captcha(req.captcha_id, req.captcha_text, test_mode=test_mode):
+        if not await verify_captcha(req.captcha_id, req.captcha_text, test_mode=test_mode):
             raise HTTPException(status_code=400, detail="验证码错误或已过期")
 
     # 登录成功：重置失败计数
@@ -158,7 +158,7 @@ async def register(req: RegisterRequest, request: Request, db: AsyncSession = De
     test_mode = _is_test_mode(request)
 
     # 验证码校验（测试模式仅验证 captcha_id 存在，跳过文本比对）
-    if not verify_captcha(req.captcha_id, req.captcha_text, test_mode=test_mode):
+    if not await verify_captcha(req.captcha_id, req.captcha_text, test_mode=test_mode):
         raise HTTPException(status_code=400, detail="验证码错误或已过期")
 
     phone = req.phone.strip()
@@ -209,7 +209,7 @@ async def reset_password(req: ResetPasswordRequest, request: Request, db: AsyncS
     test_mode = _is_test_mode(request)
 
     # 1. 验证码校验（优先检查，错误时明确提示）
-    if not verify_captcha(req.captcha_id, req.captcha_text, test_mode=test_mode):
+    if not await verify_captcha(req.captcha_id, req.captcha_text, test_mode=test_mode):
         raise HTTPException(status_code=400, detail="验证码错误")
 
     # 2. 根据 name + phone 查找用户

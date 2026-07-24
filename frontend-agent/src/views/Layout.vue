@@ -64,6 +64,9 @@
               <el-icon><Bell /></el-icon> 待处理
             </el-button>
           </el-badge>
+          <el-button text size="small" @click="toggleTheme" :title="isDark ? '切换亮色' : '切换暗色'">
+            <el-icon :size="18"><Sunny v-if="isDark" /><Moon v-else /></el-icon>
+          </el-button>
         </div>
       </el-header>
       <el-main class="main">
@@ -78,7 +81,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ticketApi } from '@/api'
-import { ChatDotRound, HomeFilled, Tickets, SwitchButton, Bell, Fold, Expand } from '@element-plus/icons-vue'
+import { ChatDotRound, HomeFilled, Tickets, SwitchButton, Bell, Fold, Expand, Sunny, Moon } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
@@ -87,6 +90,13 @@ const store = useUserStore()
 const pendingCount = ref(0)
 const sidebarCollapsed = ref(false)
 const isMobile = ref(false)
+const isDark = ref(localStorage.getItem('theme') === 'dark')
+
+function toggleTheme() {
+  isDark.value = !isDark.value
+  document.documentElement.classList.toggle('dark', isDark.value)
+  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+}
 const sidebarWidth = computed(() => {
   if (isMobile.value) return sidebarCollapsed.value ? '0px' : '220px'
   return sidebarCollapsed.value ? '64px' : '220px'
@@ -103,6 +113,8 @@ const activeMenu = computed(() => route.path)
 onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
+  // 初始化暗色主题
+  document.documentElement.classList.toggle('dark', isDark.value)
   try {
     const dash = await ticketApi.dashboard()
     pendingCount.value = dash.pending_count || 0
@@ -238,5 +250,18 @@ function handleLogout() { store.logout(); router.push('/login') }
 @media (max-width: 480px) {
   .header { padding: 0 12px; }
   .main { padding: 8px; }
+}
+
+/* 暗色主题 */
+:global(html.dark) .header {
+  background: #1d1e1f;
+  border-bottom-color: #363637;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+:global(html.dark) .main {
+  background: #0a0a0a;
+}
+:global(html.dark) .sidebar {
+  background: linear-gradient(180deg, #0a0a0a 0%, #141414 100%);
 }
 </style>

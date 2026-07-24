@@ -36,6 +36,8 @@ class Settings(BaseSettings):
 
     @property
     def REDIS_URL(self) -> str:
+        if not self.REDIS_HOST:
+            return ""
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     # Feishu

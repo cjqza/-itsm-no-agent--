@@ -87,19 +87,75 @@ async def generate_next_login_id(db: "AsyncSession") -> str:
     return f"U{max_seq + 1:05d}"
 
 
-# 权限缓存：{ user_id: (itsm_access, ops_access, admin_access, expire_ts) }
-_perm_cache: dict[int, tuple[bool, bool, bool, float]] = {}
+# ============ 权限缓存（Redis 优先 + 内存 fallback） ============
 _PERM_CACHE_TTL = 60  # 秒
 _PERM_CACHE_MAX = 1000
 
+# 内存 fallback：{ user_id: (itsm_access, ops_access, admin_access, expire_ts) }
+_perm_cache: dict[int, tuple[bool, bool, bool, float]] = {}
 
-def _invalidate_perm_cache(user_id: int) -> None:
-    """清除指定用户的权限缓存"""
+
+async def _get_perm_from_cache(uid: int) -> tuple[bool, bool, bool] | None:
+    """从缓存获取权限，优先 Redis，fallback 内存。返回 None 表示未命中。"""
+    # 1) 尝试 Redis
+    try:
+        from app.utils.redis import get_redis
+        r = await get_redis()
+        if r is not None:
+            data = await r.hgetall(f"perm:{uid}")
+            if data:
+                return (data.get("itsm") == "1", data.get("ops") == "1", data.get("admin") == "1")
+    except Exception:
+        pass
+
+    # 2) fallback: 内存缓存
+    now = time()
+    cached = _perm_cache.get(uid)
+    if cached and cached[3] > now:
+        return (cached[0], cached[1], cached[2])
+    return None
+
+
+async def _set_perm_cache(uid: int, itsm: bool, ops: bool, admin: bool) -> None:
+    """写入权限缓存（Redis + 内存双写）。"""
+    # 1) Redis
+    try:
+        from app.utils.redis import get_redis
+        r = await get_redis()
+        if r is not None:
+            key = f"perm:{uid}"
+            pipe = r.pipeline()
+            pipe.hset(key, mapping={
+                "itsm": "1" if itsm else "0",
+                "ops": "1" if ops else "0",
+                "admin": "1" if admin else "0",
+            })
+            pipe.expire(key, _PERM_CACHE_TTL)
+            await pipe.execute()
+    except Exception:
+        pass
+
+    # 2) 内存 fallback
+    now = time()
+    if len(_perm_cache) >= _PERM_CACHE_MAX:
+        _perm_cache.clear()
+    _perm_cache[uid] = (itsm, ops, admin, now + _PERM_CACHE_TTL)
+
+
+async def _invalidate_perm_cache(user_id: int) -> None:
+    """清除指定用户的权限缓存（内存 + Redis）。"""
     _perm_cache.pop(user_id, None)
+    try:
+        from app.utils.redis import get_redis
+        r = await get_redis()
+        if r is not None:
+            await r.delete(f"perm:{user_id}")
+    except Exception as e:
+        logger.warning(f"Redis 权限缓存删除失败: {e}")
 
 
 def _invalidate_all_perm_cache() -> None:
-    """清空全部权限缓存"""
+    """清空全部权限缓存（仅内存；Redis 各 key 自带 TTL 会自动过期）。"""
     _perm_cache.clear()
 
 
@@ -116,12 +172,11 @@ def require_permission(permission_field: str):
             return current_user
 
         uid = current_user.id
-        now = time()
 
-        # 检查缓存
-        cached = _perm_cache.get(uid)
-        if cached and cached[3] > now:
-            itsm, ops, admin = cached[0], cached[1], cached[2]
+        # 检查缓存（Redis 优先，fallback 内存）
+        cached = await _get_perm_from_cache(uid)
+        if cached is not None:
+            itsm, ops, admin = cached
         else:
             # 查 DB
             async with AsyncSessionLocal() as db:
@@ -138,11 +193,8 @@ def require_permission(permission_field: str):
             ops = bool(perm.ops_access)
             admin = bool(perm.admin_access)
 
-            # 防内存泄漏：缓存过大时清空
-            if len(_perm_cache) >= _PERM_CACHE_MAX:
-                _perm_cache.clear()
-
-            _perm_cache[uid] = (itsm, ops, admin, now + _PERM_CACHE_TTL)
+            # 写入缓存
+            await _set_perm_cache(uid, itsm, ops, admin)
 
         # 校验对应字段
         field_map = {"itsm_access": itsm, "ops_access": ops, "admin_access": admin}

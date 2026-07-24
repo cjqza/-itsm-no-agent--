@@ -12,6 +12,7 @@ import asyncio
 
 from app.config import get_settings
 from app.database import init_db
+from app.utils.redis import close_redis
 from app.api.auth import router as auth_router
 from app.api.itsm import router as itsm_router
 from app.api.ops import router as ops_router
@@ -64,6 +65,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} 已启动")
     yield
 
+    await close_redis()
     logger.info("应用关闭")
 
 
@@ -93,7 +95,7 @@ app.add_middleware(
 
 
 # ============ 限流 ============
-# 存储结构: {client_ip: {path_group: [timestamps]}}
+# 内存 fallback 存储结构: {client_ip: {path_group: [timestamps]}}
 _rate_limit_store: dict = defaultdict(lambda: defaultdict(list))
 RATE_LIMIT_CLEANUP_INTERVAL = 60  # 每60秒清理一次过期记录
 _last_cleanup = time.time()
@@ -107,8 +109,20 @@ def _get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _check_rate_limit(client_ip: str, path: str, limit: int, window: int = 60) -> bool:
-    """检查是否超过限流，返回True表示允许，False表示限流"""
+def _determine_rate_limit_group(path: str) -> str:
+    """根据请求路径确定限流分组"""
+    if "/auth/login" in path:
+        return "login"
+    elif "/auth/register" in path:
+        return "register"
+    elif "/auth/captcha" in path:
+        return "captcha"
+    else:
+        return "api"
+
+
+def _check_rate_limit_memory(client_ip: str, path: str, limit: int, window: int = 60) -> bool:
+    """内存限流实现（Redis 不可用时的 fallback）"""
     global _last_cleanup
     now = time.time()
 
@@ -128,16 +142,7 @@ def _check_rate_limit(client_ip: str, path: str, limit: int, window: int = 60) -
         for ip in expired_ips:
             del _rate_limit_store[ip]
 
-    # 确定限流分组
-    if "/auth/login" in path:
-        group = "login"
-    elif "/auth/register" in path:
-        group = "register"
-    elif "/auth/captcha" in path:
-        group = "captcha"
-    else:
-        group = "api"
-
+    group = _determine_rate_limit_group(path)
     timestamps = _rate_limit_store[client_ip][group]
     # 清除窗口外的记录
     timestamps[:] = [t for t in timestamps if now - t < window]
@@ -147,6 +152,43 @@ def _check_rate_limit(client_ip: str, path: str, limit: int, window: int = 60) -
 
     timestamps.append(now)
     return True
+
+
+async def _check_rate_limit(client_ip: str, path: str, limit: int, window: int = 60) -> bool:
+    """检查是否超过限流，优先使用 Redis sorted set，失败时降级到内存。
+    返回 True 表示允许，False 表示限流。
+    """
+    from app.utils.redis import get_redis
+
+    r = await get_redis()
+    if r is None:
+        return _check_rate_limit_memory(client_ip, path, limit, window)
+
+    try:
+        group = _determine_rate_limit_group(path)
+        key = f"ratelimit:{group}:{client_ip}"
+        now = time.time()
+        cutoff = now - window
+
+        # 清理过期 + 计数
+        pipe = r.pipeline()
+        pipe.zremrangebyscore(key, 0, cutoff)
+        pipe.zcard(key)
+        results = await pipe.execute()
+        count = results[1]
+
+        if count >= limit:
+            return False
+
+        # 添加当前请求（使用纳秒时间戳作为唯一成员）
+        pipe = r.pipeline()
+        pipe.zadd(key, {str(time.time_ns()): now})
+        pipe.expire(key, window)
+        await pipe.execute()
+        return True
+    except Exception as e:
+        logger.warning(f"Redis 限流操作失败，降级到内存: {e}")
+        return _check_rate_limit_memory(client_ip, path, limit, window)
 
 
 @app.middleware("http")
@@ -170,7 +212,7 @@ async def rate_limit_middleware(request: Request, call_next):
 
     # 登录接口: 5次/分钟/IP
     if "/auth/login" in path:
-        if not _check_rate_limit(client_ip, path, limit=5, window=60):
+        if not await _check_rate_limit(client_ip, path, limit=5, window=60):
             logger.warning(f"限流: {client_ip} 登录接口请求过于频繁")
             return JSONResponse(
                 status_code=429,
@@ -178,7 +220,7 @@ async def rate_limit_middleware(request: Request, call_next):
             )
     # 注册接口: 3次/小时/IP
     elif "/auth/register" in path:
-        if not _check_rate_limit(client_ip, path, limit=3, window=3600):
+        if not await _check_rate_limit(client_ip, path, limit=3, window=3600):
             logger.warning(f"限流: {client_ip} 注册接口请求过于频繁")
             return JSONResponse(
                 status_code=429,
@@ -186,7 +228,7 @@ async def rate_limit_middleware(request: Request, call_next):
             )
     # 验证码接口: 10次/分钟/IP
     elif "/auth/captcha" in path:
-        if not _check_rate_limit(client_ip, path, limit=10, window=60):
+        if not await _check_rate_limit(client_ip, path, limit=10, window=60):
             logger.warning(f"限流: {client_ip} 验证码接口请求过于频繁")
             return JSONResponse(
                 status_code=429,
@@ -194,7 +236,7 @@ async def rate_limit_middleware(request: Request, call_next):
             )
     # 其他API: 120次/分钟
     elif path.startswith("/api/") or path.startswith("/admin/"):
-        if not _check_rate_limit(client_ip, path, limit=120, window=60):
+        if not await _check_rate_limit(client_ip, path, limit=120, window=60):
             logger.warning(f"限流: {client_ip} API请求过于频繁")
             return JSONResponse(
                 status_code=429,

@@ -51,47 +51,20 @@
           <el-tag :type="statusType(selectedRoom.ticket_status)" size="small">{{ statusText(selectedRoom.ticket_status) }}</el-tag>
         </div>
         <div class="chat-messages" ref="chatRef">
-          <div v-for="msg in messages" :key="msg.id" :class="['msg', msg.sender_id === userId ? 'self' : 'other']">
-            <div class="msg-sender">{{ msg.sender_name }}</div>
-            <div class="msg-content">
-              <!-- 图片消息 -->
-              <div v-if="msg.msg_type === 'image'" class="msg-image">
-                <el-image :src="msg.content" :preview-src-list="[msg.content]" fit="contain" style="max-width: 260px; max-height: 260px; border-radius: 8px;" />
-              </div>
-              <!-- 文件消息 -->
-              <div v-else-if="msg.msg_type === 'file'" class="msg-file">
-                <el-icon :size="20"><Document /></el-icon>
-                <a :href="getFileUrl(msg.content)" target="_blank" download class="file-link">{{ getFileName(msg.content) }}</a>
-              </div>
-              <!-- 系统消息 -->
-              <div v-else-if="msg.msg_type === 'system'" class="msg-system">{{ msg.content }}</div>
-              <!-- 文本消息 -->
-              <div v-else class="msg-text">{{ msg.content }}</div>
-            </div>
-            <div class="msg-time">{{ formatTime(msg.created_at) }}</div>
-          </div>
+          <ChatMessage
+            v-for="msg in messages"
+            :key="msg.id"
+            :msg="msg"
+            :current-user-id="userId"
+          />
         </div>
-        <div class="chat-input-area" v-if="selectedRoom.status !== 'closed'">
-          <div class="input-row">
-            <el-upload :show-file-list="false" :before-upload="handleFileSelect" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar">
-              <el-button :icon="Paperclip" circle />
-            </el-upload>
-            <el-input
-              v-model="inputText"
-              placeholder="输入消息... (Enter发送)"
-              @keyup.enter="sendTextMessage"
-              :disabled="sending"
-            />
-            <el-button type="primary" @click="sendTextMessage" :loading="sending" :disabled="!inputText.trim() && !pendingFile">
-              发送
-            </el-button>
-          </div>
-          <div v-if="pendingFile" class="pending-file">
-            <el-tag closable @close="pendingFile = null" size="small">
-              <el-icon><Document /></el-icon> {{ pendingFile.name }}
-            </el-tag>
-          </div>
-        </div>
+        <ChatInput
+          v-if="selectedRoom.status !== 'closed'"
+          ref="chatInputRef"
+          placeholder="输入消息... (Enter发送)"
+          @send="sendTextMessage"
+          @upload="handleFileUpload"
+        />
         <div v-else class="chat-closed-hint">
           <el-icon><CircleClose /></el-icon> 聊天室已关闭
         </div>
@@ -105,12 +78,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, computed } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Paperclip, Document, MoreFilled, Delete, CircleClose } from '@element-plus/icons-vue'
+import { MoreFilled, Delete, CircleClose } from '@element-plus/icons-vue'
 import { chatApi, uploadApi } from '@/api'
 import { useUserStore } from '@/store/user'
 import { statusType, statusText } from '@shared/utils/status'
+import { useWebSocket } from '@shared/composables/useWebSocket'
+import ChatMessage from '@shared/components/ChatMessage.vue'
+import ChatInput from '@shared/components/ChatInput.vue'
 
 const store = useUserStore()
 const userId = computed(() => store.userId)
@@ -118,15 +94,24 @@ const userId = computed(() => store.userId)
 const rooms = ref([])
 const selectedRoom = ref(null)
 const messages = ref([])
-const inputText = ref('')
-const pendingFile = ref(null)
-const sending = ref(false)
 const loading = ref(false)
 const chatRef = ref(null)
-const ws = ref(null)
-const reconnectAttempts = ref(0)
+const chatInputRef = ref(null)
 
-// 加载聊天室列表
+const { connect, disconnect } = useWebSocket({
+  onMessage: (data) => {
+    if (data.type === 'chat_message' && data.room_id === selectedRoom.value?.id) {
+      messages.value.push(data.message)
+      scrollToBottom()
+      chatApi.markRead(selectedRoom.value.id).catch(() => {})
+    }
+  },
+})
+
+onUnmounted(() => {
+  disconnect()
+})
+
 async function loadRooms() {
   loading.value = true
   try {
@@ -137,123 +122,50 @@ async function loadRooms() {
   loading.value = false
 }
 
-// 选择聊天室
 async function selectRoom(room) {
   selectedRoom.value = room
   messages.value = []
+  disconnect()
   try {
     const msgRes = await chatApi.getMessages(room.id)
     messages.value = msgRes.items || msgRes
     scrollToBottom()
-    // 标记已读
     await chatApi.markRead(room.id)
     room.unread = 0
-    // 连接WebSocket
-    connectWS(room.id)
+    connect(`/api/chat/ws/${room.id}`)
   } catch (e) {
     console.error('加载聊天记录失败', e)
   }
 }
 
-// WebSocket连接
-function connectWS(roomId) {
-  if (ws.value) {
-    ws.value.close()
-    ws.value = null
-  }
-  const token = localStorage.getItem('token')
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const wsUrl = `${protocol}//${location.host}/api/chat/ws/${roomId}?token=${token}`
-  const socket = new WebSocket(wsUrl)
-
-  socket.onopen = () => {
-    reconnectAttempts.value = 0
-    // 启动心跳
-    socket._heartbeat = setInterval(() => {
-      if (socket.readyState === WebSocket.OPEN) socket.send('ping')
-    }, 30000)
-  }
-
-  socket.onmessage = (event) => {
-    if (event.data === 'pong') return
-    try {
-      const data = JSON.parse(event.data)
-      if (data.type === 'chat_message' && data.room_id === roomId) {
-        messages.value.push(data.message)
-        scrollToBottom()
-        // 标记已读
-        chatApi.markRead(roomId).catch(() => {})
-      }
-    } catch (e) {}
-  }
-
-  socket.onclose = () => {
-    if (socket._heartbeat) clearInterval(socket._heartbeat)
-    // 重连
-    if (selectedRoom.value?.id === roomId && reconnectAttempts.value < 10) {
-      reconnectAttempts.value++
-      const delay = Math.min(3000 * reconnectAttempts.value, 30000)
-      setTimeout(() => {
-        if (selectedRoom.value?.id === roomId) connectWS(roomId)
-      }, delay)
-    }
-  }
-
-  ws.value = socket
-}
-
-// 发送文本消息
-async function sendTextMessage() {
-  const text = inputText.value.trim()
-  if (!text) return
-
-  // 如果有文件，先上传
-  if (pendingFile.value) {
-    sending.value = true
-    const uploadResult = await uploadFile(pendingFile.value)
-    sending.value = false
-    if (uploadResult) {
-      const isImage = pendingFile.value.type.startsWith('image/')
-      const content = isImage ? `[图片] ${uploadResult.url}` : `[文件] ${pendingFile.value.name}\n${uploadResult.url}`
-      await chatApi.sendMessage(selectedRoom.value.id, {
-        content,
-        msg_type: isImage ? 'image' : 'text',
-      })
-    }
-    pendingFile.value = null
-  }
-
-  if (!text) return
-  inputText.value = ''
-  sending.value = true
+async function sendTextMessage(text) {
+  if (!text || !selectedRoom.value) return
   try {
     await chatApi.sendMessage(selectedRoom.value.id, { content: text, msg_type: 'text' })
   } catch (e) {
     ElMessage.error('发送失败')
   }
-  sending.value = false
 }
 
-// 文件上传
-function handleFileSelect(file) {
+async function handleFileUpload(file) {
   if (file.size > 10 * 1024 * 1024) {
     ElMessage.warning('文件大小不能超过10MB')
-    return false
+    return
   }
-  pendingFile.value = file
-  return false
-}
-
-async function uploadFile(file) {
   try {
-    return await uploadApi.upload(file)
+    const result = await uploadApi.upload(file)
+    const isImage = file.type.startsWith('image/')
+    const content = isImage ? `[图片] ${result.url}` : `[文件] ${file.name}\n${result.url}`
+    await chatApi.sendMessage(selectedRoom.value.id, {
+      content,
+      msg_type: isImage ? 'image' : 'file',
+    })
+    ElMessage.success('文件发送成功')
   } catch (e) {
     ElMessage.error('文件上传失败')
-    return null
   }
 }
 
-// 删除聊天室
 async function handleRoomAction(command, room) {
   if (command === 'delete') {
     try {
@@ -267,7 +179,7 @@ async function handleRoomAction(command, room) {
       if (selectedRoom.value?.id === room.id) {
         selectedRoom.value = null
         messages.value = []
-        if (ws.value) { ws.value.close(); ws.value = null }
+        disconnect()
       }
       await loadRooms()
     } catch (e) {
@@ -276,34 +188,10 @@ async function handleRoomAction(command, room) {
   }
 }
 
-// 辅助函数
 function scrollToBottom() {
   nextTick(() => {
     if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight
   })
-}
-
-function formatTime(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const now = new Date()
-  const diff = now - d
-  if (diff < 86400000 && d.getDate() === now.getDate()) {
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  }
-  return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
-
-function getFileUrl(content) {
-  if (!content) return ''
-  const lines = content.split('\n')
-  return lines[lines.length - 1] || ''
-}
-
-function getFileName(content) {
-  if (!content) return '文件'
-  const match = content.match(/\[文件\]\s*(.+)/)
-  return match ? match[1] : '文件'
 }
 
 onMounted(loadRooms)
@@ -366,39 +254,7 @@ onMounted(loadRooms)
 .chat-title { font-weight: 600; font-size: 14px; color: #1e293b; }
 
 .chat-messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-.msg { max-width: 70%; }
-.msg.self { align-self: flex-end; }
-.msg.other { align-self: flex-start; }
-.msg-sender { font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
-.msg.self .msg-sender { text-align: right; }
-.msg-content {
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 14px;
-  line-height: 1.6;
-  word-break: break-word;
-}
-.msg.self .msg-content {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  color: white;
-  border-bottom-right-radius: 4px;
-}
-.msg.other .msg-content {
-  background: #f1f5f9;
-  color: #334155;
-  border-bottom-left-radius: 4px;
-}
-.msg-system { background: transparent !important; color: #94a3b8 !important; text-align: center; font-size: 12px; padding: 4px 0 !important; }
-.msg-time { font-size: 11px; color: #cbd5e1; margin-top: 4px; }
-.msg.self .msg-time { text-align: right; }
-.msg-image { margin: 4px 0; }
-.msg-file { display: flex; align-items: center; gap: 8px; }
-.file-link { color: inherit; text-decoration: underline; }
 
-/* 输入区 */
-.chat-input-area { padding: 12px 20px; border-top: 1px solid #f0f0f0; background: #fafbfc; }
-.input-row { display: flex; gap: 8px; align-items: center; }
-.pending-file { margin-top: 8px; }
 .chat-closed-hint {
   padding: 16px;
   text-align: center;

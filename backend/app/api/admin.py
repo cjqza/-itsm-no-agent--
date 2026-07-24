@@ -345,7 +345,7 @@ async def update_permission(
         detail=f"itsm:{itsm_access}, ops:{ops_access}, admin:{admin_access}",
     ))
     await db.commit()
-    _invalidate_perm_cache(user_id)
+    await _invalidate_perm_cache(user_id)
     return {"success": True}
 
 
@@ -455,7 +455,7 @@ async def review_permission_request(
     ))
     await db.commit()
     if action == "approved":
-        _invalidate_perm_cache(req.user_id)
+        await _invalidate_perm_cache(req.user_id)
     return {"success": True}
 
 
@@ -523,7 +523,7 @@ async def review_account_request(
             db.add(Permission(user_id=user.id))
 
         await db.commit()
-        _invalidate_perm_cache(user.id)
+        await _invalidate_perm_cache(user.id)
         return {"success": True, "action": "approve", "login_id": user.login_id}
     else:
         user.status = UserStatus.INACTIVE

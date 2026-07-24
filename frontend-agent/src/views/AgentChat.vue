@@ -1,6 +1,6 @@
 <template>
   <div class="agent-chat">
-    <!-- 巽: 工单列表 -->
+    <!-- 左侧: 工单列表 -->
     <div class="sidebar">
       <div class="sidebar-header">
         <span class="title">消息</span>
@@ -56,33 +56,21 @@
 
         <!-- 消息列表 -->
         <div class="messages" ref="messagesRef">
-          <div v-for="msg in messages" :key="msg.id" :class="['msg', msg.msg_type]">
-            <template v-if="msg.msg_type === 'system'">
-              <div class="sys-msg">{{ msg.content }}</div>
-            </template>
-            <template v-else>
-              <div :class="['bubble', msg.sender_id === store.user.id ? 'mine' : 'other']">
-                <div class="sender">{{ msg.sender_name }}</div>
-                <div class="text">{{ msg.content }}</div>
-                <div class="time">{{ formatMsgTime(msg.created_at) }}</div>
-              </div>
-            </template>
-          </div>
+          <ChatMessage
+            v-for="msg in messages"
+            :key="msg.id"
+            :msg="msg"
+            :current-user-id="store.user.id"
+          />
           <div v-if="messages.length === 0" class="no-messages">暂无消息</div>
         </div>
 
         <!-- 输入区域 -->
-        <div class="input-area" v-if="chatRoom && chatRoom.status === 'active'">
-          <el-input
-            v-model="inputText"
-            placeholder="输入消息... (Enter发送)"
-            @keyup.enter="sendMessage"
-            :disabled="sending"
-          />
-          <el-button type="primary" @click="sendMessage" :loading="sending" :disabled="!inputText.trim()">
-            发送
-          </el-button>
-        </div>
+        <ChatInput
+          v-if="chatRoom && chatRoom.status === 'active'"
+          placeholder="输入消息... (Enter发送)"
+          @send="sendMessage"
+        />
         <div class="input-area disabled" v-else-if="chatRoom && chatRoom.status === 'closed'">
           <span class="closed-hint">聊天室已关闭</span>
         </div>
@@ -105,6 +93,9 @@ import { ticketApi, chatApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import { ChatDotRound } from '@element-plus/icons-vue'
 import { statusTagType, statusText } from '@shared/utils/status'
+import { useWebSocket } from '@shared/composables/useWebSocket'
+import ChatMessage from '@shared/components/ChatMessage.vue'
+import ChatInput from '@shared/components/ChatInput.vue'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -114,33 +105,38 @@ const ticketList = ref([])
 const selectedTicket = ref(null)
 const chatRoom = ref(null)
 const messages = ref([])
-const inputText = ref('')
-const sending = ref(false)
 const messagesRef = ref(null)
-const unreadCounts = ref({})  // {ticketId: count}
-let ws = null
+const unreadCounts = ref({})
+
+const { connect, disconnect } = useWebSocket({
+  onMessage: (data) => {
+    if (data.type === 'chat_message' && data.message) {
+      const exists = messages.value.some(m => m.id === data.message.id)
+      if (!exists) {
+        messages.value.push(data.message)
+        scrollToBottom()
+      }
+    }
+  },
+})
 
 onMounted(async () => {
   await loadTickets()
 })
 
 onUnmounted(() => {
-  closeWs()
+  disconnect()
 })
 
 async function loadTickets() {
   try {
-    // 获取当前客服已接单和处理中的工单
     const res = await ticketApi.list({
       assignee_id: store.user.id,
       page_size: 100,
     })
-    // 只显示已接单、处理中、待评价的工单
     ticketList.value = (res.items || []).filter(t =>
       ['accepted', 'processing', 'resolved_pending_review'].includes(t.status)
     )
-
-    // 加载每个工单的未读消息数
     await loadUnreadCounts()
   } catch (e) {
     console.error('加载工单失败', e)
@@ -165,83 +161,31 @@ async function selectTicket(ticket) {
   selectedTicket.value = ticket
   messages.value = []
   chatRoom.value = null
-  closeWs()
+  disconnect()
 
   try {
-    // 获取聊天室
     const room = await chatApi.getRoom(ticket.id)
     chatRoom.value = room
 
-    // 获取消息
     const msgRes = await chatApi.getMessages(room.id)
     messages.value = msgRes.items || msgRes
     scrollToBottom()
 
-    // 标记消息为已读
     await chatApi.markRead(room.id)
     unreadCounts.value[ticket.id] = 0
 
-    // 连接WebSocket
-    connectWs(room.id)
+    connect(`/api/chat/ws/${room.id}`)
   } catch (e) {
-    // 聊天室可能还未创建
     chatRoom.value = null
   }
 }
 
-function connectWs(roomId) {
-  closeWs()
-  const token = localStorage.getItem('token')
-  if (!token) return
-
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  ws = new WebSocket(`${protocol}//${location.host}/api/chat/ws/${roomId}?token=${token}`)
-
-  ws.onmessage = (event) => {
-    if (event.data === 'pong') return
-    try {
-      const data = JSON.parse(event.data)
-      if (data.type === 'chat_message' && data.message) {
-        const exists = messages.value.some(m => m.id === data.message.id)
-        if (!exists) {
-          messages.value.push(data.message)
-          scrollToBottom()
-        }
-      }
-    } catch (e) {}
-  }
-
-  ws.onclose = () => {
-    // 自动重连
-    if (selectedTicket.value && chatRoom.value) {
-      setTimeout(() => {
-        if (selectedTicket.value && chatRoom.value?.id === roomId) {
-          connectWs(roomId)
-        }
-      }, 3000)
-    }
-  }
-}
-
-function closeWs() {
-  if (ws) {
-    ws.close()
-    ws = null
-  }
-}
-
-async function sendMessage() {
-  const text = inputText.value.trim()
+async function sendMessage(text) {
   if (!text || !chatRoom.value) return
-
-  sending.value = true
   try {
     await chatApi.sendMessage(chatRoom.value.id, { content: text })
-    inputText.value = ''
   } catch (e) {
     ElMessage.error('发送失败')
-  } finally {
-    sending.value = false
   }
 }
 
@@ -254,7 +198,7 @@ async function handleResolve() {
     selectedTicket.value = null
     messages.value = []
     chatRoom.value = null
-    closeWs()
+    disconnect()
   } catch (e) {
     ElMessage.error('操作失败')
   }
@@ -283,14 +227,9 @@ function formatTime(t) {
   return d.format('MM-DD')
 }
 
-function formatMsgTime(t) {
-  return t ? dayjs(t).format('HH:mm') : ''
-}
-
 function statusColor(s) {
   return { accepted: '#409eff', processing: '#e6a23c', resolved_pending_review: '#67c23a' }[s] || '#999'
 }
-
 </script>
 
 <style scoped>
@@ -455,69 +394,6 @@ function statusColor(s) {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
-}
-
-.msg {
-  margin-bottom: 16px;
-}
-
-.sys-msg {
-  text-align: center;
-  color: #999;
-  font-size: 12px;
-  padding: 8px 0;
-}
-
-.bubble {
-  max-width: 70%;
-}
-
-.bubble.mine {
-  margin-left: auto;
-}
-
-.bubble.other {
-  margin-right: auto;
-}
-
-.sender {
-  font-size: 12px;
-  color: #999;
-  margin-bottom: 4px;
-}
-
-.bubble.mine .sender {
-  text-align: right;
-}
-
-.text {
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 14px;
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.bubble.mine .text {
-  background: #2563eb;
-  color: white;
-  border-bottom-right-radius: 4px;
-}
-
-.bubble.other .text {
-  background: #f3f4f6;
-  color: #333;
-  border-bottom-left-radius: 4px;
-}
-
-.time {
-  font-size: 11px;
-  color: #ccc;
-  margin-top: 4px;
-}
-
-.bubble.mine .time {
-  text-align: right;
 }
 
 .no-messages {
