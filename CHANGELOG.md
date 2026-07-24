@@ -2,6 +2,13 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-24] P2 优化：聊天分页、Permission 缓存、审计日志前端页、移动端适配
+- **变更**：四项 P2 优化打包交付。(1) 聊天消息分页：`chat.py` 的 `get_messages` 从一次性返回全部消息改为分页返回 `{total, page, page_size, items}`，四端聊天调用方（AgentChat / TicketDetail / Chat / ChatRooms）适配新返回格式。(2) Permission 内存缓存：`auth.py` 的 `require_permission` 增加 60 秒 TTL 内存缓存，避免每次请求都查库；`admin.py` 权限变更时自动清除对应用户缓存，保证一致性。(3) 审计日志前端页面：新建 `AuditLogs.vue`（筛选条件 + 分页表格 + 操作类型/目标类型标签展示），admin 前端 Layout 新增「操作日志」菜单项，路由同步注册。(4) 移动端适配：5 个关键页面通过 `@media` 断点（768px/480px）实现响应式——Login.vue 卡片宽度自适应、Dashboard.vue 四象限小屏单列、Layout.vue 侧边栏折叠+汉堡按钮+遮罩层、Overview.vue 统计卡片小屏 2 列/1 列。
+- **原因**：聊天消息无分页导致长对话加载缓慢；权限校验每次查库增加数据库压力；审计日志虽有后端接口但缺少前端管理页面；移动端访问布局错乱无法正常使用。
+- **影响**：`backend/app/api/chat.py`（消息分页返回）；`backend/app/utils/auth.py`（60s 权限缓存）；`backend/app/api/admin.py`（权限变更清缓存）；`frontend/src/views/admin/AuditLogs.vue`（新建审计日志页）；`frontend/src/views/admin/Layout.vue`（新增菜单项 + 移动端适配）；`frontend/src/router/index.js`（审计日志路由）；`frontend/src/api/index.js`（审计日志 API）；`frontend-agent/src/views/AgentChat.vue`（适配分页格式）；`frontend-agent/src/views/Dashboard.vue`（移动端适配）；`frontend-agent/src/views/Layout.vue`（移动端适配）；`frontend-agent/src/views/TicketDetail.vue`（适配分页格式）；`frontend-client/src/views/Chat.vue`（适配分页格式）；`frontend-client/src/views/ChatRooms.vue`（适配分页格式）；`frontend-client/src/views/Login.vue`（移动端适配）；`frontend-ops/src/views/Overview.vue`（移动端适配）。前后端均有改动，共 15 个文件。
+- **提交**：`62ed2e2`
+- **测试**：73/73 全部通过。
+
 ## [2026-07-23] P2 优化：错误边界、骨架屏、管理员审计、忘记密码修复、前端全面美化、Agent 架构重构
 - **变更**：大量改动打包交付。(1) 全局错误边界：四端 main.js 注册 `app.config.errorHandler` 捕获未处理异常并 `console.error`。(2) 骨架屏：TicketList / Dashboard / MyTickets / Overview 四个列表页加载态从 spinner 改为 `el-skeleton`。(3) 管理员操作审计：新增 `AuditLog` 模型（audit_logs 表），admin.py 中 7 个关键操作（创建管理员、创建/更新/删除客服、审批权限、审批账号、修改权限）自动记录审计日志；新增 `GET /api/admin/audit-logs` 分页查询接口（支持 operator_id / action / date range 筛选）。(4) 忘记密码：新增 `POST /api/auth/reset-password`（account + name + new_password），四端 Login.vue 均增加忘记密码对话框；错误提示细分（验证码错误 400 / 账号姓名不匹配 400 / 新旧密码相同 400 / 账号锁定 423）。(5) 前端界面优化：22 个 Vue 文件全面美化（登录页渐变背景+居中卡片、Layout 侧边栏配色、表格/卡片圆角阴影、色彩间距统一）。(6) Agent 架构重构：新建 `front.md`（前端专家）、`backend.md`（后端专家）、`pm.md`（产品经理）三个 agent 定义；`coder.md` 改为调度中枢（不写代码，负责分派+审查+测试+提交）。(7) 后台管理增强：admin.py 新增 `POST /api/admin/admins`（super_admin 创建管理员）、`POST /api/admin/agents`（创建客服）、`PUT /api/admin/agents/{user_id}`（更新客服）、`DELETE /api/admin/agents/{user_id}`（删除客服）共 4 个新端点；用户列表搜索增强（支持 name / phone / login_id / feishu_user_id 四字段关键字搜索）；权限页改造为「账号管理」+ 客服 CRUD 入口。(8) 四端 api/index.js 新增 `resetPassword` 方法。
 - **原因**：P2 优化清单中的高价值项集中交付：前端缺少全局错误兜底；列表页加载态体验差；管理员关键操作无审计追溯；用户忘记密码无自助重置途径；前端视觉风格不统一；Agent 定义职责混乱；后台管理缺少客服 CRUD 和管理员创建能力。

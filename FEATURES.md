@@ -124,6 +124,7 @@
 - [x] 管理员创建（super_admin 可创建 admin/super_admin 账号）
 - [x] 客服管理 CRUD（创建/更新/删除客服账号）
 - [x] 审计日志查询（管理员关键操作追溯）
+- [x] 审计日志前端页面（筛选+分页+操作类型/目标类型标签）
 
 ### 3.2 分类配置
 - [x] 管理单元 CRUD
@@ -215,7 +216,7 @@
 | GET | /api/chat/rooms/{ticket_id} | 获取工单聊天室 |
 | GET | /api/chat/my-rooms | 我的聊天室列表 |
 | DELETE | /api/chat/rooms/{room_id} | 删除聊天室及消息 |
-| GET | /api/chat/rooms/{room_id}/messages | 获取聊天记录 |
+| GET | /api/chat/rooms/{room_id}/messages | 获取聊天记录（分页，返回 {total, page, page_size, items}） |
 | POST | /api/chat/rooms/{room_id}/messages | 发送消息 |
 | PUT | /api/chat/rooms/{room_id}/close | 关闭聊天室 |
 | POST | /api/chat/rooms/{room_id}/read | 标记已读 |
@@ -289,6 +290,7 @@
 - [x] 权限申请 → 管理员审批流程
 - [x] 用户状态校验（PENDING/禁用用户无法登录）
 - [x] 登录限流（5 次/分钟，注册 3 次/小时，验证码 10 次/分钟）
+- [x] 权限校验内存缓存（require_permission 60s TTL，权限变更自动清除）
 
 ### 6.2 实时通信
 - [x] WebSocket 聊天（per-room）
@@ -320,6 +322,8 @@
 - [x] WebSocket 并行广播（asyncio.gather 替代顺序 await）
 - [x] 前端空 catch 块统一补错误提示（12 处）
 - [x] Pydantic 输入校验（rating 1-5、title 200 字、description 5000 字、模板 title/content 长度限制）
+- [x] 聊天消息分页加载（get_messages 返回 {total, page, page_size, items}）
+- [x] 移动端响应式适配（Login/Dashboard/Layout/Overview，@media 768px/480px 断点）
 
 ---
 
