@@ -9,7 +9,6 @@ class TicketCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=5000)
     priority: str = "P3"
     category_id: Optional[int] = None
-    creator_id: Optional[int] = None  # 可选，不传则自动使用当前用户ID
 
 
 class TicketUpdate(BaseModel):

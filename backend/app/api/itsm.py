@@ -1,4 +1,5 @@
 """ITSM API - 工单管理"""
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -6,9 +7,10 @@ from typing import Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel
 
-from app.database import get_db
-from app.models.user import User
+from app.database import get_db, AsyncSessionLocal
+from app.models.user import User, UserRole
 from app.models.ticket import Ticket, TicketStatus, TicketLog
+from app.models.permission import Permission
 from app.schemas.ticket import (
     TicketCreate, TicketUpdate, TicketStatusUpdate,
     TicketRate, TicketRemark, TicketMessage,
@@ -17,7 +19,21 @@ from app.utils.auth import get_current_user, require_permission
 from app.services.ticket_service import ticket_service
 from app.services.sla_service import sla_service
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/itsm", tags=["ITSM"])
+
+
+async def _has_itsm_access(current_user: User) -> bool:
+    """内联检查用户是否拥有 itsm_access 权限"""
+    if current_user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
+        return True
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Permission).where(Permission.user_id == current_user.id)
+        )
+        perm = result.scalar_one_or_none()
+    return bool(perm and perm.itsm_access)
 
 
 class TicketTransferRequest(BaseModel):
@@ -73,8 +89,7 @@ async def create_ticket(
     db: AsyncSession = Depends(get_db),
 ):
     """创建工单"""
-    # 如果未指定creator_id，自动使用当前用户ID
-    creator_id = data.creator_id if data.creator_id is not None else current_user.id
+    creator_id = current_user.id
     ticket = await ticket_service.create_ticket(
         db=db,
         title=data.title,
@@ -105,6 +120,10 @@ async def list_tickets(
     db: AsyncSession = Depends(get_db),
 ):
     """工单列表"""
+    # 权限隔离：无 itsm_access 的用户只能查看自己创建的工单
+    if not await _has_itsm_access(current_user):
+        creator_id = current_user.id
+
     return await ticket_service.list_tickets(
         db=db,
         page=page,
@@ -124,9 +143,15 @@ async def search_tickets(
     db: AsyncSession = Depends(get_db),
 ):
     """搜索工单"""
+    # 权限隔离：无 itsm_access 的用户只能搜索自己创建的工单
+    effective_creator_id = None
+    if not await _has_itsm_access(current_user):
+        effective_creator_id = current_user.id
+
     return await ticket_service.list_tickets(
         db=db,
         keyword=keyword,
+        creator_id=effective_creator_id,
         page_size=50,
     )
 
@@ -158,12 +183,16 @@ async def get_ticket(
     db: AsyncSession = Depends(get_db),
 ):
     """工单详情"""
-    import logging
-    logger = logging.getLogger(__name__)
     try:
         ticket = await ticket_service.get_ticket(db, ticket_id)
         if not ticket:
             raise HTTPException(status_code=404, detail="工单不存在")
+
+        # 权限校验：仅创建者、被分配客服、或有 itsm_access 的用户可查看
+        if not await _has_itsm_access(current_user):
+            if ticket["creator_id"] != current_user.id and ticket["assignee_id"] != current_user.id:
+                raise HTTPException(status_code=403, detail="无权查看此工单")
+
         return ticket
     except HTTPException:
         raise
@@ -246,9 +275,17 @@ async def rate_ticket(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """评价工单"""
+    """评价工单（仅工单创建者可评价）"""
     if data.rating < 1 or data.rating > 5:
         raise HTTPException(status_code=400, detail="评分必须在1-5之间")
+
+    # 先校验工单归属
+    result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
+    ticket_obj = result.scalar_one_or_none()
+    if not ticket_obj:
+        raise HTTPException(status_code=404, detail="工单不存在")
+    if ticket_obj.creator_id != current_user.id:
+        raise HTTPException(status_code=403, detail="只有工单创建者可以评价")
 
     ticket = await ticket_service.rate_ticket(
         db=db,
@@ -306,7 +343,17 @@ async def get_ticket_logs(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """工单操作记录"""
+    """工单操作记录（仅创建者、被分配客服、或有 itsm_access 可查看）"""
+    # 先校验工单归属
+    ticket_result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
+    ticket_obj = ticket_result.scalar_one_or_none()
+    if not ticket_obj:
+        raise HTTPException(status_code=404, detail="工单不存在")
+
+    if not await _has_itsm_access(current_user):
+        if ticket_obj.creator_id != current_user.id and ticket_obj.assignee_id != current_user.id:
+            raise HTTPException(status_code=403, detail="无权查看此工单记录")
+
     return await ticket_service.get_ticket_logs(db, ticket_id)
 
 
@@ -350,8 +397,8 @@ async def transfer_ticket(
         from app.utils.websocket import ws_manager
         ticket_dict = ticket_service._ticket_to_dict(ticket)
         await ws_manager.notify_ticket_update(ticket_dict, [data.assignee_id])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"WebSocket通知失败: {e}")
 
     return {"success": True, "assignee_name": target_user.name}
 
@@ -400,11 +447,15 @@ async def urge_ticket(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """催办工单"""
+    """催办工单（仅创建者或被分配客服可催办）"""
     result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
     ticket = result.scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="工单不存在")
+
+    # 权限校验：创建者或被分配客服
+    if ticket.creator_id != current_user.id and ticket.assignee_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权催办此工单")
 
     if ticket.status in [TicketStatus.RESOLVED, TicketStatus.RESOLVED_PENDING_REVIEW]:
         raise HTTPException(status_code=400, detail="已解决的工单不能催办")
@@ -432,7 +483,7 @@ async def urge_ticket(
                     "message": urge_msg,
                 },
             })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"WebSocket催办通知失败: {e}")
 
     return {"success": True, "message": "催办已发送"}

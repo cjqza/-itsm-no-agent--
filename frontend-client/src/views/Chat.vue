@@ -15,7 +15,7 @@
           v-for="msg in messages"
           :key="msg.id"
           :msg="msg"
-          :current-user-id="store.user.id"
+          :current-user-id="store.user?.id || 0"
         />
       </div>
 
@@ -23,8 +23,8 @@
         v-if="ticket?.status !== 'resolved'"
         ref="chatInputRef"
         placeholder="输入消息..."
-        @send="sendMessage"
-        @upload="handleUpload"
+        :onSend="sendMessage"
+        :onUpload="handleUpload"
       />
 
       <!-- 催办/取消按钮 -->

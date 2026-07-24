@@ -19,6 +19,7 @@ from app.schemas.category import (
 )
 from app.models.audit_log import AuditLog
 from app.utils.auth import require_permission, get_current_user, generate_next_login_id, hash_password, _invalidate_perm_cache
+from app.utils import escape_like
 
 router = APIRouter(prefix="/api/admin", tags=["后台管理"])
 
@@ -62,11 +63,12 @@ async def list_users(
     """
     conditions = []
     if keyword:
+        safe_kw = escape_like(keyword)
         conditions.append(
-            (User.name.like(f"%{keyword}%")) |
-            (User.email.like(f"%{keyword}%")) |
-            (User.login_id.like(f"%{keyword}%")) |
-            (User.phone.like(f"%{keyword}%"))
+            (User.name.like(f"%{safe_kw}%", escape="\\")) |
+            (User.email.like(f"%{safe_kw}%", escape="\\")) |
+            (User.login_id.like(f"%{safe_kw}%", escape="\\")) |
+            (User.phone.like(f"%{safe_kw}%", escape="\\"))
         )
     if role:
         conditions.append(User.role == role)
@@ -300,11 +302,12 @@ async def list_permissions(
     """权限列表"""
     query = select(Permission, User).join(User, Permission.user_id == User.id)
     if keyword:
+        safe_kw = escape_like(keyword)
         query = query.where(
-            (User.name.like(f"%{keyword}%")) |
-            (User.email.like(f"%{keyword}%")) |
-            (User.login_id.like(f"%{keyword}%")) |
-            (User.phone.like(f"%{keyword}%"))
+            (User.name.like(f"%{safe_kw}%", escape="\\")) |
+            (User.email.like(f"%{safe_kw}%", escape="\\")) |
+            (User.login_id.like(f"%{safe_kw}%", escape="\\")) |
+            (User.phone.like(f"%{safe_kw}%", escape="\\"))
         )
     query = query.order_by(User.id)
     result = await db.execute(query)
@@ -450,6 +453,9 @@ async def review_permission_request(
     db: AsyncSession = Depends(get_db),
 ):
     """审批权限申请"""
+    if action not in ("approved", "rejected"):
+        raise HTTPException(status_code=400, detail="action 必须为 approved 或 rejected")
+
     result = await db.execute(
         select(PermissionRequest).where(PermissionRequest.id == request_id)
     )

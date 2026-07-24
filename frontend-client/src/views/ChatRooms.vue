@@ -62,8 +62,8 @@
           v-if="selectedRoom.status !== 'closed'"
           ref="chatInputRef"
           placeholder="输入消息... (Enter发送)"
-          @send="sendTextMessage"
-          @upload="handleFileUpload"
+          :onSend="sendTextMessage"
+          :onUpload="handleFileUpload"
         />
         <div v-else class="chat-closed-hint">
           <el-icon><CircleClose /></el-icon> 聊天室已关闭

@@ -10,6 +10,7 @@ from app.models.user import User, UserRole
 from app.models.ticket import Ticket, TicketStatus, SLAStatus
 from app.models.category import Category
 from app.utils.auth import require_permission
+from app.utils import escape_like
 
 router = APIRouter(prefix="/api/ops", tags=["OPS"])
 
@@ -270,6 +271,7 @@ async def export_tickets(
     from fastapi.responses import StreamingResponse
     from openpyxl import Workbook
     from sqlalchemy import or_
+    from sqlalchemy.orm import selectinload
     import io
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
@@ -280,15 +282,19 @@ async def export_tickets(
     if category_id:
         conditions.append(Ticket.category_id == category_id)
     if keyword:
+        safe_kw = escape_like(keyword)
         conditions.append(
             or_(
-                Ticket.ticket_no.like(f"%{keyword}%"),
-                Ticket.title.like(f"%{keyword}%"),
+                Ticket.ticket_no.like(f"%{safe_kw}%", escape="\\"),
+                Ticket.title.like(f"%{safe_kw}%", escape="\\"),
             )
         )
 
     result = await db.execute(
-        select(Ticket).where(*conditions).order_by(Ticket.created_at.desc())
+        select(Ticket)
+        .options(selectinload(Ticket.category))
+        .where(*conditions)
+        .order_by(Ticket.created_at.desc())
     )
     tickets = result.scalars().all()
 
@@ -322,7 +328,7 @@ async def export_tickets(
             t.title,
             status_map.get(t.status.value, t.status.value) if t.status else "",
             t.priority.value if t.priority else "",
-            str(t.category_id) or "",
+            t.category.name if t.category else "",
             t.sla_status.value if t.sla_status else "",
             t.rating or "",
             t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else "",

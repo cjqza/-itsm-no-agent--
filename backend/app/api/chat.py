@@ -17,6 +17,9 @@ from app.utils.websocket import ws_manager
 
 router = APIRouter(prefix="/api/chat", tags=["聊天"])
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class SendMessageRequest(BaseModel):
     content: str
@@ -25,6 +28,39 @@ class SendMessageRequest(BaseModel):
 
 # 聊天室连接管理
 chat_connections: dict[int, set] = {}  # room_id -> set of (websocket, user_id)
+
+
+async def _check_room_access(room_id: int, current_user: User, db: AsyncSession) -> ChatRoom:
+    """校验用户是否有权访问聊天室：创建者、被分配客服、或有 itsm_access"""
+    from app.models.user import UserRole
+    from app.models.permission import Permission
+
+    result = await db.execute(
+        select(ChatRoom)
+        .options(selectinload(ChatRoom.ticket))
+        .where(ChatRoom.id == room_id)
+    )
+    room = result.scalar_one_or_none()
+    if not room:
+        raise HTTPException(status_code=404, detail="聊天室不存在")
+
+    # 管理员自动放行
+    if current_user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
+        return room
+
+    ticket = room.ticket
+    if ticket and (ticket.creator_id == current_user.id or ticket.assignee_id == current_user.id):
+        return room
+
+    # 检查 itsm_access
+    perm_result = await db.execute(
+        select(Permission).where(Permission.user_id == current_user.id)
+    )
+    perm = perm_result.scalar_one_or_none()
+    if perm and perm.itsm_access:
+        return room
+
+    raise HTTPException(status_code=403, detail="无权访问此聊天室")
 
 
 @router.post("/rooms/{ticket_id}")
@@ -231,6 +267,9 @@ async def get_messages(
     db: AsyncSession = Depends(get_db),
 ):
     """获取聊天记录（分页）"""
+    # 权限校验
+    await _check_room_access(room_id, current_user, db)
+
     # 总数
     count_result = await db.execute(
         select(func.count(ChatMessage.id)).where(ChatMessage.room_id == room_id)
@@ -274,11 +313,8 @@ async def send_message(
     db: AsyncSession = Depends(get_db),
 ):
     """发送消息"""
-    # 检查聊天室
-    result = await db.execute(select(ChatRoom).where(ChatRoom.id == room_id))
-    room = result.scalar_one_or_none()
-    if not room:
-        raise HTTPException(status_code=404, detail="聊天室不存在")
+    # 权限校验 + 检查聊天室
+    room = await _check_room_access(room_id, current_user, db)
     if room.status == RoomStatus.CLOSED:
         raise HTTPException(status_code=400, detail="聊天室已关闭")
 
@@ -325,10 +361,7 @@ async def close_chat_room(
     db: AsyncSession = Depends(get_db),
 ):
     """关闭聊天室"""
-    result = await db.execute(select(ChatRoom).where(ChatRoom.id == room_id))
-    room = result.scalar_one_or_none()
-    if not room:
-        raise HTTPException(status_code=404, detail="聊天室不存在")
+    room = await _check_room_access(room_id, current_user, db)
 
     from datetime import datetime, timezone
     room.status = RoomStatus.CLOSED
@@ -360,6 +393,9 @@ async def mark_messages_read(
     db: AsyncSession = Depends(get_db),
 ):
     """标记房间内所有消息为已读"""
+    # 权限校验
+    await _check_room_access(room_id, current_user, db)
+
     # 获取房间内该用户未读的消息
     result = await db.execute(
         select(ChatMessage.id)
@@ -451,6 +487,43 @@ async def websocket_chat(websocket: WebSocket, room_id: int, token: str = ""):
     except Exception:
         await websocket.close(code=4001, reason="token验证失败")
         return
+
+    # 权限校验：检查用户是否有权访问此聊天室
+    async with AsyncSessionLocal() as access_db:
+        try:
+            access_result = await access_db.execute(
+                select(ChatRoom)
+                .options(selectinload(ChatRoom.ticket))
+                .where(ChatRoom.id == room_id)
+            )
+            access_room = access_result.scalar_one_or_none()
+            if not access_room:
+                await websocket.close(code=4003, reason="聊天室不存在")
+                return
+            if access_room.ticket:
+                from app.models.user import UserRole
+                from app.models.permission import Permission
+                has_access = False
+                if access_room.ticket.creator_id == user_id or access_room.ticket.assignee_id == user_id:
+                    has_access = True
+                if not has_access:
+                    user_result = await access_db.execute(select(User).where(User.id == user_id))
+                    ws_user = user_result.scalar_one_or_none()
+                    if ws_user and ws_user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
+                        has_access = True
+                if not has_access:
+                    perm_result = await access_db.execute(
+                        select(Permission).where(Permission.user_id == user_id)
+                    )
+                    perm = perm_result.scalar_one_or_none()
+                    if perm and perm.itsm_access:
+                        has_access = True
+                if not has_access:
+                    await websocket.close(code=4003, reason="无权访问此聊天室")
+                    return
+        except Exception:
+            await websocket.close(code=4003, reason="权限校验失败")
+            return
 
     await websocket.accept()
 

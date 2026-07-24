@@ -10,6 +10,7 @@ from app.models.ticket import Ticket, TicketLog, TicketStatus, SLAStatus
 from app.models.user import User, UserRole
 from app.models.category import Category
 from app.utils.ticket_no import generate_ticket_no
+from app.utils import escape_like
 
 logger = logging.getLogger(__name__)
 
@@ -175,10 +176,11 @@ class TicketService:
         if category_id:
             conditions.append(Ticket.category_id == category_id)
         if keyword:
+            safe_kw = escape_like(keyword)
             conditions.append(
                 or_(
-                    Ticket.ticket_no.like(f"%{keyword}%"),
-                    Ticket.title.like(f"%{keyword}%"),
+                    Ticket.ticket_no.like(f"%{safe_kw}%", escape="\\"),
+                    Ticket.title.like(f"%{safe_kw}%", escape="\\"),
                 )
             )
 

@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 480  # 8 hours
 
+    # Security
+    TRUST_PROXY: bool = False  # 是否信任 X-Forwarded-For 头（生产环境反向代理后设为 True）
+
     # SLA Default (hours)
     DEFAULT_SLA_HOURS: int = 4
     SLA_WARNING_PERCENT: int = 50  # 超过50%变红色

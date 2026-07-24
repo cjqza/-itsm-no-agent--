@@ -103,9 +103,10 @@ _last_cleanup = time.time()
 
 def _get_client_ip(request: Request) -> str:
     """获取客户端真实IP"""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    if settings.TRUST_PROXY:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
 

@@ -156,18 +156,27 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ticketApi, chatApi, adminApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import { priorityType, slaColor, slaText, slaTagType } from '@shared/utils/status'
 import { formatTime } from '@shared/utils/format'
+import { useWebSocket } from '@shared/composables/useWebSocket'
 
 const router = useRouter()
 const route = useRoute()
 const store = useUserStore()
-const ticketId = route.params.id
+let ticketId = route.params.id
+
+// Bug #13: 监听路由参数变化，复用组件时重新加载
+watch(() => route.params.id, (newId) => {
+  if (newId && newId !== ticketId) {
+    ticketId = newId
+    loadAll()
+  }
+})
 
 const ticket = ref({})
 const logs = ref([])
@@ -183,14 +192,32 @@ const remarkText = ref('')
 const showTransfer = ref(false)
 const transferTarget = ref(null)
 const transferReason = ref('')
-let chatWs = null
+
+// Bug #14: SLA 百分比实时更新
+const now = ref(Date.now())
+let nowTimer = setInterval(() => { now.value = Date.now() }, 60000)
+
+// Bug #9 + #12: 使用共享的 useWebSocket composable（含心跳 + 指数退避重连）
+const { connect: connectChatWs, disconnect: disconnectChatWs } = useWebSocket({
+  onMessage: (data) => {
+    if (data.type === 'chat_message' && data.message) {
+      const exists = chatMessages.value.some(m => m.id === data.message.id)
+      if (!exists) {
+        chatMessages.value.push(data.message)
+        scrollToBottom()
+      }
+    }
+  },
+})
 
 onMounted(async () => {
   await loadAll()
 })
 
 onUnmounted(() => {
-  if (chatWs) { chatWs.close(); chatWs = null }
+  chatRoom.value = null
+  disconnectChatWs()
+  clearInterval(nowTimer)
 })
 
 async function loadAll() {
@@ -212,42 +239,13 @@ async function loadAll() {
       const msgRes = await chatApi.getMessages(chatRoom.value.id)
       chatMessages.value = msgRes.items || msgRes
       scrollToBottom()
-      connectChatWs()
+      connectChatWs(`/api/chat/ws/${chatRoom.value.id}`)
     } catch (e) { chatRoom.value = null }
   } finally { loading.value = false }
 }
 
-function connectChatWs() {
-  if (chatWs) chatWs.close()
-  if (!chatRoom.value) return
-  const token = localStorage.getItem('token')
-  if (!token) return
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const roomId = chatRoom.value.id
-  chatWs = new WebSocket(`${protocol}//${location.host}/api/chat/ws/${roomId}?token=${token}`)
-
-  chatWs.onmessage = (event) => {
-    if (event.data === 'pong') return
-    try {
-      const data = JSON.parse(event.data)
-      if (data.type === 'chat_message' && data.message) {
-        // 避免重复：如果消息已存在则跳过
-        const exists = chatMessages.value.some(m => m.id === data.message.id)
-        if (!exists) {
-          chatMessages.value.push(data.message)
-          scrollToBottom()
-        }
-      }
-    } catch (e) {}
-  }
-
-  chatWs.onclose = () => {
-    // 自动重连（仅在组件还挂载时）
-    if (chatRoom.value) {
-      setTimeout(() => connectChatWs(), 3000)
-    }
-  }
-}
+// WebSocket 连接已由 useWebSocket composable 处理（心跳 30s + 指数退避重连 3s→30s）
+// connectChatWs 在 loadAll 中调用 connect(`/api/chat/ws/${roomId}`)
 
 const lifecycleSteps = computed(() => {
   const statusOrder = ['pending', 'accepted', 'processing', 'resolved_pending_review', 'resolved']
@@ -263,13 +261,13 @@ const lifecycleSteps = computed(() => {
 const slaPercent = computed(() => {
   if (!ticket.value.sla_deadline || !ticket.value.created_at) return 0
   const total = new Date(ticket.value.sla_deadline) - new Date(ticket.value.created_at)
-  const elapsed = Date.now() - new Date(ticket.value.created_at)
+  const elapsed = now.value - new Date(ticket.value.created_at)
   return Math.min(100, Math.round(elapsed / total * 100))
 })
 
 const slaRemaining = computed(() => {
   if (!ticket.value.sla_deadline) return '-'
-  const remaining = new Date(ticket.value.sla_deadline) - Date.now()
+  const remaining = new Date(ticket.value.sla_deadline) - now.value
   if (remaining <= 0) return '已超时'
   const hours = Math.floor(remaining / 3600000)
   const minutes = Math.floor((remaining % 3600000) / 60000)
@@ -325,7 +323,7 @@ async function handleRemark() {
 
 async function handlePauseSla() {
   try {
-    await ticketApi.remark(ticketId, { remark: '暂停计时', pause_ola: true })
+    await ticketApi.pauseSla(ticketId)
     ElMessage.success('SLA已暂停')
     await loadAll()
   } catch (e) { ElMessage.error('SLA暂停失败') }
@@ -333,7 +331,7 @@ async function handlePauseSla() {
 
 async function handleResumeSla() {
   try {
-    await ticketApi.remark(ticketId, { remark: '恢复计时', pause_ola: false })
+    await ticketApi.resumeSla(ticketId)
     ElMessage.success('SLA已恢复')
     await loadAll()
   } catch (e) { ElMessage.error('SLA恢复失败') }

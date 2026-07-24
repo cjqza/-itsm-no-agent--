@@ -69,7 +69,7 @@
         <ChatInput
           v-if="chatRoom && chatRoom.status === 'active'"
           placeholder="输入消息... (Enter发送)"
-          @send="sendMessage"
+          :onSend="sendMessage"
         />
         <div class="input-area disabled" v-else-if="chatRoom && chatRoom.status === 'closed'">
           <span class="closed-hint">聊天室已关闭</span>

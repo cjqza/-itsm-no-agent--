@@ -164,7 +164,9 @@ const STORAGE_KEY = 'home_chat_messages'
 const ROOM_KEY = 'home_chat_room_id'
 const TICKET_KEY = 'home_chat_ticket_id'
 
-const messages = ref(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'))
+let parsedMessages = []
+try { parsedMessages = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { parsedMessages = [] }
+const messages = ref(parsedMessages)
 const currentRoomId = ref(localStorage.getItem(ROOM_KEY) || null)
 const currentTicketId = ref(localStorage.getItem(TICKET_KEY) || null)
 

@@ -36,9 +36,11 @@ import { ref } from 'vue'
 import { Paperclip, Document } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
-defineProps({
+const props = defineProps({
   placeholder: { type: String, default: '输入消息...' },
   disabled: { type: Boolean, default: false },
+  onSend: { type: Function, default: null },
+  onUpload: { type: Function, default: null },
 })
 
 const emit = defineEmits(['send', 'upload'])
@@ -63,11 +65,20 @@ async function handleSend() {
   sending.value = true
   try {
     if (pendingFile.value) {
-      emit('upload', pendingFile.value)
+      const file = pendingFile.value
       pendingFile.value = null
+      if (props.onUpload) {
+        await props.onUpload(file)
+      } else {
+        emit('upload', file)
+      }
     }
     if (text) {
-      emit('send', text)
+      if (props.onSend) {
+        await props.onSend(text)
+      } else {
+        emit('send', text)
+      }
       inputText.value = ''
     }
   } finally {
