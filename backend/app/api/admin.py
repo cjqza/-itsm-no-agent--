@@ -90,15 +90,18 @@ async def list_users(
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    # 数据
-    query = select(User)
+    # 数据（JOIN Permission 表获取权限）
+    query = (
+        select(User, Permission)
+        .outerjoin(Permission, User.id == Permission.user_id)
+    )
     if conditions:
         query = query.where(*conditions)
     query = query.order_by(User.id)
     query = query.offset((page - 1) * page_size).limit(page_size)
 
     result = await db.execute(query)
-    users = result.scalars().all()
+    rows = result.all()
 
     return {
         "total": total,
@@ -115,8 +118,11 @@ async def list_users(
                 "is_online": u.is_online,
                 "locked_until": u.locked_until.isoformat() if u.locked_until else None,
                 "created_at": u.created_at.isoformat() if u.created_at else None,
+                "itsm_access": p.itsm_access if p else False,
+                "ops_access": p.ops_access if p else False,
+                "admin_access": p.admin_access if p else False,
             }
-            for u in users
+            for u, p in rows
         ],
     }
 
