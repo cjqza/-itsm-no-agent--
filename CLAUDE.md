@@ -25,12 +25,14 @@ stop.bat
 # Reset database (delete SQLite file + re-seed)
 rm backend/it_ops.db && cd backend && python seed_data.py
 
-# Run tests
+# Run tests (requires backend running on :8000)
 cd backend && python tests/test_api.py    # ~73 cases, ~3.5min
 
 # Docker deployment
 docker-compose up -d
 ```
+
+**Test mode for API calls**: Add header `X-Test-Mode: true` (localhost only) to skip CAPTCHA in automated tests.
 
 ## Architecture
 
@@ -59,14 +61,14 @@ docker-compose up -d
 ### Backend (`backend/`)
 
 - **Framework**: FastAPI with async SQLAlchemy (aiosqlite for dev, aiomysql for prod)
-- **Auth**: JWT tokens + bcrypt password hashing + CAPTCHA + account locking
+- **Auth**: JWT tokens + bcrypt password hashing + CAPTCHA (always required) + account locking + IP fail limit
 - **Config**: `app/config.py` — Pydantic Settings, reads `.env`, cached via `@lru_cache`
-- **Database**: `app/database.py` — `get_db()` dependency yields a session, auto-commits on success
+- **Database**: `app/database.py` — `get_db()` dependency yields a session. **No auto-commit** — all endpoints must explicitly `await db.commit()`.
 - **API routes**: `app/api/` — `auth.py`, `itsm.py`, `chat.py`, `admin.py`, `ops.py`, `upload.py`, `templates.py`, `captcha.py`
 - **Services**: `app/services/` — `ticket_service.py` (core ticket logic), `sla_service.py` (SLA timer checks)
 - **Models**: `app/models/` — `user.py`, `ticket.py`, `category.py`, `permission.py`, `chat.py`, `template.py`, `audit_log.py`
 - **Cache**: `app/utils/redis.py` — Redis cache with automatic fallback to in-memory when Redis unavailable
-- **WebSocket**: Two separate WS systems — global notification WS in `utils/websocket.py`, chat-specific WS in `api/chat.py`
+- **WebSocket**: Two separate WS systems — global notification WS in `utils/websocket.py`, chat-specific WS in `api/chat.py`. Per-user connection limit: 5.
 - **Background tasks**: `app/tasks/sla_checker.py` — APScheduler runs every minute to update SLA status colors
 
 ### Frontend Shared Layer (`shared/`)
@@ -90,13 +92,15 @@ Each frontend extends the base store with its own computed properties (admin add
 
 | Agent | Model | Role |
 |-------|-------|------|
-| `coder` | Opus | Orchestrator: analyze → delegate to front/backend → review code → run tests → git commit |
+| `coder` | Opus | Orchestrator: analyze → delegate to front/backend → review code → run tests → git commit. Does NOT write business code directly. |
 | `front` | Sonnet | Frontend specialist: Vue/JS code in `frontend*/src/` and `shared/` |
 | `backend` | Sonnet | Backend specialist: Python code in `backend/` |
 | `initializer` | Sonnet | CHANGELOG.md, FEATURES.md, git operations |
 | `pm` | Opus | Product analysis, PRD, competitive analysis |
 
-**Workflow**: User request → `coder` analyzes and delegates → `front`/`backend` implement → `coder` reviews + tests + commits → `initializer` updates logs.
+**Workflow**: User request → `coder` analyzes and delegates to `front`/`backend` → `coder` reviews + tests + commits → `initializer` updates logs.
+
+**Key rule**: `coder` must NOT write business code directly. It delegates to `front`/`backend`, reviews their work, runs tests, and commits. This ensures code quality through separation of concerns.
 
 ## Ticket Lifecycle
 
@@ -118,15 +122,19 @@ SLA color coding: green (normal) → yellow (30%+) → red (50%+) → black (ove
 ## Authentication System
 
 ### Login
-- `POST /api/auth/login` — `{account, password}` (account = login_id or phone)
-- Account lockout: 5 failed attempts → locked 15 minutes (423 response)
-- CAPTCHA required after 3 failed attempts
+- `POST /api/auth/login` — `{account, password, captcha_id, captcha_text}` (account = login_id or phone)
+- **CAPTCHA always required** — every login attempt must include valid captcha
+- Account lockout: 5 failed attempts → **permanently locked** (needs admin to unlock via `PUT /api/admin/users/{id}/unlock`)
+- IP fail limit: 10 failed login attempts per IP per 5 minutes → 429 "请求过于频繁"
 - Unified error: "账号或密码错误" (prevents account enumeration)
 
 ### Registration
-- `POST /api/auth/register` — `{name, phone, password}` + CAPTCHA
+- `POST /api/auth/register` — `{name, phone, password, captcha_id, captcha_text}`
 - Auto-creates user with ACTIVE status + auto-generates login_id (U00001 format)
 - Returns token immediately (register = login)
+
+### Unlock Account
+- `PUT /api/admin/users/{id}/unlock` — admin_access required, resets fail count and lock
 
 ### Forgot Password
 - `POST /api/auth/reset-password` — `{name, phone, captcha_id, captcha_text, new_password}`
@@ -139,12 +147,21 @@ SLA color coding: green (normal) → yellow (30%+) → red (50%+) → black (ove
 - `require_permission("field")` dependency in `app/utils/auth.py` with 60s Redis/memory cache
 - Admins and super_admins auto-grant all permissions
 
+### Admin User Management
+- `GET /api/admin/users` — returns users with permission fields (joined with Permission table)
+- `POST /api/admin/agents/upgrade?user_id=X` — upgrade existing user to agent (grants itsm+ops)
+- `POST /api/admin/agents/downgrade?user_id=X` — downgrade agent to user (revokes itsm+ops)
+- `PUT /api/admin/users/{id}/unlock` — unlock locked account
+- Frontend: "设置" dialog allows editing user info and toggling permissions via switches
+
 ### Key Credentials
 | Role | login_id | phone | password |
 |------|----------|-------|----------|
 | Super Admin | `admin` | `10000000000` | `admin123` |
 | Agent (张三) | `U00001` | `13900000001` | `123456` |
 | User (刘一) | `U00006` | `13900010001` | `123456` |
+
+All logins require CAPTCHA. In tests, use `X-Test-Mode: true` header to bypass.
 
 ## Key Patterns
 
@@ -157,6 +174,14 @@ SLA color coding: green (normal) → yellow (30%+) → red (50%+) → black (ove
 **Redis fallback**: All Redis operations (`redis.py`) wrap in try/except and fall back to in-memory storage when Redis is unavailable. The system works identically with or without Redis.
 
 **CAPTCHA test mode**: Requests with `X-Test-Mode: true` header (localhost only) skip CAPTCHA verification in tests.
+
+**Explicit commit**: `get_db()` does NOT auto-commit. Every write endpoint must call `await db.commit()` explicitly. Do not rely on implicit commits.
+
+**Permission cache**: `require_permission()` caches permission checks for 60s (Redis or memory). After modifying permissions via `update_permission`, call `await _invalidate_perm_cache(user_id)` to clear the cache.
+
+**`has_permission()` helper**: Use `from app.utils.auth import has_permission` for inline permission checks that reuse the cache (e.g. in `itsm.py`'s `_has_itsm_access`).
+
+**Login always requires CAPTCHA**: `LoginRequest` requires `captcha_id` and `captcha_text`. Frontend must load captcha via `GET /api/auth/captcha` before showing login form.
 
 ## Common Issues
 
@@ -171,6 +196,10 @@ SLA color coding: green (normal) → yellow (30%+) → red (50%+) → black (ove
 **alembic.ini encoding**: On Windows, `alembic.ini` must be GBK encoded (not UTF-8) or alembic will fail with `UnicodeDecodeError`.
 
 **bcrypt warning**: `passlib 1.7.4` + `bcrypt 4.x` shows `AttributeError: module 'bcrypt' has no attribute '__about__'` — this is a known compatibility warning, functionality works correctly.
+
+**Missing commit**: If data seems to not persist, check that the endpoint calls `await db.commit()`. `get_db()` does NOT auto-commit.
+
+**Vue component errors**: If a page shows "页面出现异常，请刷新重试", check for missing icon imports (`@element-plus/icons-vue`) or uncaught async errors in `openXxxDialog` functions (add try-catch).
 
 **Test pass rate: 73/73 (100%)**. All tests must pass before committing.
 
