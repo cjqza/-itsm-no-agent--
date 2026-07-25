@@ -66,12 +66,14 @@ class BusinessModuleOut(BaseModel):
 class GenericItemCreate(BaseModel):
     name: str
     description: Optional[str] = None
+    business_module_id: Optional[int] = None  # 绑定业务模块（症状/原因/解决方法用）
     sort_order: int = 0
 
 
 class GenericItemUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    business_module_id: Optional[int] = None
     sort_order: Optional[int] = None
     status: Optional[str] = None
 
@@ -80,6 +82,7 @@ class GenericItemOut(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    business_module_id: Optional[int] = None
     sort_order: int
     status: str
     created_at: datetime

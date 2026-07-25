@@ -102,6 +102,9 @@
           <el-table :data="symptoms" stripe>
             <el-table-column prop="id" label="ID" width="60" />
             <el-table-column prop="name" label="名称" />
+            <el-table-column label="所属业务模块" width="150">
+              <template #default="{ row }">{{ getModuleName(row.business_module_id) }}</template>
+            </el-table-column>
             <el-table-column prop="description" label="描述" />
             <el-table-column label="操作" width="150">
               <template #default="{ row }">
@@ -126,6 +129,9 @@
           <el-table :data="causes" stripe>
             <el-table-column prop="id" label="ID" width="60" />
             <el-table-column prop="name" label="名称" />
+            <el-table-column label="所属业务模块" width="150">
+              <template #default="{ row }">{{ getModuleName(row.business_module_id) }}</template>
+            </el-table-column>
             <el-table-column prop="description" label="描述" />
             <el-table-column label="操作" width="150">
               <template #default="{ row }">
@@ -150,6 +156,9 @@
           <el-table :data="solutions" stripe>
             <el-table-column prop="id" label="ID" width="60" />
             <el-table-column prop="name" label="名称" />
+            <el-table-column label="所属业务模块" width="150">
+              <template #default="{ row }">{{ getModuleName(row.business_module_id) }}</template>
+            </el-table-column>
             <el-table-column prop="description" label="描述" />
             <el-table-column label="操作" width="150">
               <template #default="{ row }">
@@ -172,6 +181,11 @@
         <el-form-item label="所属管理单元" v-if="currentType === 'modules'">
           <el-select v-model="formData.category_id" style="width: 100%">
             <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="所属业务模块" v-if="['symptoms', 'causes', 'solutions'].includes(currentType)">
+          <el-select v-model="formData.business_module_id" style="width: 100%" clearable placeholder="选择业务模块">
+            <el-option v-for="m in modules" :key="m.id" :label="m.name" :value="m.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="SLA(小时)" v-if="currentType === 'categories'">
@@ -205,7 +219,7 @@ const currentType = ref('')
 const editingId = ref(null)
 const saving = ref(false)
 
-const formData = reactive({ name: '', description: '', sla_hours: 4, sort_order: 0, category_id: null })
+const formData = reactive({ name: '', description: '', sla_hours: 4, sort_order: 0, category_id: null, business_module_id: null })
 
 const dialogTitle = computed(() => {
   const names = { categories: '管理单元', modules: '业务模块', properties: '性质', symptoms: '症状', causes: '原因', solutions: '解决方法' }
@@ -228,6 +242,12 @@ async function loadAll() {
   solutions.value = sol || []
 }
 
+function getModuleName(id) {
+  if (!id) return '-'
+  const m = modules.value.find(m => m.id === id)
+  return m ? m.name : '-'
+}
+
 function openDialog(type, item = null) {
   currentType.value = type
   editingId.value = item?.id || null
@@ -236,6 +256,7 @@ function openDialog(type, item = null) {
   formData.sla_hours = item?.sla_hours || 4
   formData.sort_order = item?.sort_order || 0
   formData.category_id = item?.category_id || null
+  formData.business_module_id = item?.business_module_id || null
   dialogVisible.value = true
 }
 
