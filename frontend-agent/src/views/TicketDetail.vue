@@ -55,6 +55,7 @@
           <div class="sla-bar">
             <el-progress :percentage="slaPercent" :color="slaColor(ticket.sla_status)" :stroke-width="20" />
             <div class="sla-info">
+              <span>SLA时效：{{ ticket.sla_hours || '-' }}小时</span>
               <span>已消耗：{{ slaPercent }}%</span>
               <span>剩余：{{ slaRemaining }}</span>
               <span>状态：<el-tag :type="slaTagType(ticket.sla_status)" size="small">{{ slaText(ticket.sla_status) }}</el-tag></span>
