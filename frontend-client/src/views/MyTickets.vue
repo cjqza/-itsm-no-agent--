@@ -11,7 +11,7 @@
         </div>
       </template>
       <template #default>
-        <el-table :data="tickets" stripe @row-click="goToChat" class="tickets-table" empty-text="暂无工单，去首页提交一个吧">
+        <el-table :data="tickets" stripe @row-click="handleRowClick" class="tickets-table" empty-text="暂无工单，去首页提交一个吧">
           <el-table-column prop="ticket_no" label="工单号" width="140">
             <template #default="{ row }">
               <span class="ticket-no">{{ row.ticket_no }}</span>
@@ -34,17 +34,51 @@
           <el-table-column label="操作" width="100" fixed="right">
             <template #default="{ row }">
               <el-button
-                :type="row.status === 'resolved_pending_review' ? 'warning' : 'primary'"
+                v-if="row.status === 'resolved_pending_review'"
+                type="warning"
                 link
                 @click.stop="goToChat(row)"
               >
-                {{ row.status === 'resolved_pending_review' ? '去评价' : '查看' }}
+                去评价
+              </el-button>
+              <el-button
+                v-else
+                type="primary"
+                link
+                @click.stop="handleView(row)"
+              >
+                查看
               </el-button>
             </template>
           </el-table-column>
         </el-table>
       </template>
     </el-skeleton>
+
+    <el-dialog v-model="showDetail" title="工单详情" width="480px" destroy-on-close>
+      <template v-if="selectedTicket">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="工单号">{{ selectedTicket.ticket_no }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ formatTime(selectedTicket.created_at) }}</el-descriptions-item>
+          <el-descriptions-item label="处理人">{{ selectedTicket.assignee_name || '待分配' }}</el-descriptions-item>
+          <el-descriptions-item label="服务态度">
+            <el-rate :model-value="selectedTicket.rating_attitude || 0" disabled show-score />
+          </el-descriptions-item>
+          <el-descriptions-item label="解决方法">
+            <el-rate :model-value="selectedTicket.rating_solution || 0" disabled show-score />
+          </el-descriptions-item>
+          <el-descriptions-item label="解决时间">
+            <el-rate :model-value="selectedTicket.rating_time || 0" disabled show-score />
+          </el-descriptions-item>
+          <el-descriptions-item label="总体评价">
+            <el-rate :model-value="selectedTicket.rating_overall || 0" disabled show-score />
+          </el-descriptions-item>
+          <el-descriptions-item label="反馈留言">
+            {{ selectedTicket.rating_comment || '暂无留言' }}
+          </el-descriptions-item>
+        </el-descriptions>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -61,6 +95,8 @@ const router = useRouter()
 const store = useUserStore()
 const tickets = ref([])
 const loading = ref(false)
+const selectedTicket = ref(null)
+const showDetail = ref(false)
 
 onMounted(() => loadTickets())
 
@@ -73,6 +109,24 @@ async function loadTickets() {
 }
 
 function goToChat(row) { router.push({ path: '/chat-rooms', query: { ticket_id: row.id } }) }
+
+async function handleView(row) {
+  if (row.status === 'resolved') {
+    try {
+      const detail = await ticketApi.get(row.id)
+      selectedTicket.value = detail
+      showDetail.value = true
+    } catch (e) {
+      console.error('Failed to load ticket detail', e)
+    }
+  } else {
+    goToChat(row)
+  }
+}
+
+function handleRowClick(row) {
+  handleView(row)
+}
 </script>
 
 <style scoped>
