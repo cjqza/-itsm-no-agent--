@@ -687,7 +687,9 @@ def make_crud_router(
         current_user: User = Depends(require_permission("admin_access")),
         db: AsyncSession = Depends(get_db),
     ):
-        item = model(**data.model_dump(), created_by=current_user.id)
+        # 过滤掉模型不支持的字段
+        dump = {k: v for k, v in data.model_dump().items() if hasattr(model, k)}
+        item = model(**dump, created_by=current_user.id)
         db.add(item)
         await db.commit()
         return {"success": True, "id": item.id}
@@ -717,7 +719,8 @@ def make_crud_router(
             raise HTTPException(status_code=404, detail=f"{name_zh}不存在")
 
         for key, value in data.model_dump(exclude_unset=True).items():
-            setattr(item, key, value)
+            if hasattr(item, key):
+                setattr(item, key, value)
 
         await db.commit()
         return {"success": True}
