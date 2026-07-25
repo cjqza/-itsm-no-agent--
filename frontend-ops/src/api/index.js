@@ -9,12 +9,16 @@ export const authApi = {
 }
 
 export const opsApi = {
-  getOverview: (days = 30) => api.get('/ops/statistics/overview', { params: { days } }),
-  getByCategory: (days = 30) => api.get('/ops/statistics/by-category', { params: { days } }),
-  getByAgent: (days = 30) => api.get('/ops/statistics/by-agent', { params: { days } }),
-  getRatings: (days = 30) => api.get('/ops/statistics/ratings', { params: { days } }),
-  getSlaCompliance: (days = 30) => api.get('/ops/statistics/sla-compliance', { params: { days } }),
-  getTrend: (days = 30) => api.get('/ops/statistics/trend', { params: { days } }),
+  getOverview: (days = null) => api.get('/ops/statistics/overview', { params: days ? { days } : {} }),
+  getByCategory: (days = null) => api.get('/ops/statistics/by-category', { params: days ? { days } : {} }),
+  getByAgent: (days = null) => api.get('/ops/statistics/by-agent', { params: days ? { days } : {} }),
+  getRatings: (days = null) => api.get('/ops/statistics/ratings', { params: days ? { days } : {} }),
+  getSlaCompliance: (days = null) => api.get('/ops/statistics/sla-compliance', { params: days ? { days } : {} }),
+  getTrend: (days = null) => api.get('/ops/statistics/trend', { params: days ? { days } : {} }),
+  getStatusDistribution: (days = null) => api.get('/ops/status-distribution', { params: days ? { days } : {} }),
+  getCategoryStats: (days = null) => api.get('/ops/category-stats', { params: days ? { days } : {} }),
+  getRatingDistribution: (days = null) => api.get('/ops/rating-distribution', { params: days ? { days } : {} }),
+  listTickets: (params = {}) => api.get('/ops/tickets', { params }),
   exportTickets: (params = {}) => api.get('/ops/export', { params: { days: 30, ...params }, responseType: 'blob' }),
 }
 

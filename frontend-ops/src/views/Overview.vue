@@ -3,7 +3,7 @@
     <div class="page-header">
       <h2>OPS 总览</h2>
       <div class="header-actions">
-        <el-select v-model="days" style="width: 120px" @change="loadData" size="default">
+        <el-select v-model="days" style="width: 120px" @change="loadData" size="default" clearable placeholder="全部">
           <el-option :value="7" label="最近7天" />
           <el-option :value="30" label="最近30天" />
           <el-option :value="90" label="最近90天" />
@@ -152,18 +152,20 @@ onUnmounted(() => {
 async function loadData() {
   loading.value = true
   try {
-    const [ov, trend, cat, rat] = await Promise.all([
-      opsApi.getOverview(days.value),
-      opsApi.getTrend(days.value),
-      opsApi.getByCategory(days.value),
-      opsApi.getRatings(days.value),
+    const d = days.value || null
+    const [ov, trend, statusDist, catStats, ratingDist] = await Promise.all([
+      opsApi.getOverview(d),
+      opsApi.getTrend(d),
+      opsApi.getStatusDistribution(d),
+      opsApi.getCategoryStats(d),
+      opsApi.getRatingDistribution(d),
     ])
     overview.value = ov
     await nextTick()
     renderTrendChart(trend)
-    renderStatusChart(ov.status_counts || {})
-    renderCategoryChart(cat)
-    renderRatingChart(rat.distribution || [])
+    renderStatusChart(statusDist)
+    renderCategoryChart(catStats)
+    renderRatingChart(ratingDist)
   } catch (e) {
     ElMessage.error('加载统计数据失败')
   } finally { loading.value = false }
@@ -216,9 +218,12 @@ function renderCategoryChart(data) {
   if (!categoryChart.value) return
   if (!categoryInstance) categoryInstance = echarts.init(categoryChart.value)
   categoryInstance.setOption({
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: function(params) {
+      const d = data[params[0].dataIndex]
+      return `${d.category_name}<br/>工单数: ${d.count}<br/>平均处理: ${d.avg_hours}h`
+    }},
     grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
-    xAxis: { type: 'category', data: data.map(d => d.name), axisLabel: { rotate: 30, color: '#6b7280' }, axisLine: { lineStyle: { color: '#e5e7eb' } } },
+    xAxis: { type: 'category', data: data.map(d => d.category_name), axisLabel: { rotate: 30, color: '#6b7280' }, axisLine: { lineStyle: { color: '#e5e7eb' } } },
     yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: '#f3f4f6' } }, axisLabel: { color: '#6b7280' } },
     series: [{
       data: data.map(d => d.count),
@@ -236,13 +241,14 @@ function renderRatingChart(data) {
   if (!ratingChart.value) return
   if (!ratingInstance) ratingInstance = echarts.init(ratingChart.value)
   const starColors = ['#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e']
+  const ratings = [1, 2, 3, 4, 5].map(i => ({ rating: i, count: data[`rating_${i}`] || 0 }))
   ratingInstance.setOption({
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'category', data: data.map(d => `${d.rating} 星`), axisLabel: { color: '#6b7280' }, axisLine: { lineStyle: { color: '#e5e7eb' } } },
+    xAxis: { type: 'category', data: ratings.map(d => `${d.rating} 星`), axisLabel: { color: '#6b7280' }, axisLine: { lineStyle: { color: '#e5e7eb' } } },
     yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: '#f3f4f6' } }, axisLabel: { color: '#6b7280' } },
     series: [{
-      data: data.map((d, i) => ({ value: d.count, itemStyle: { color: starColors[i] || '#6b7280', borderRadius: [4, 4, 0, 0] } })),
+      data: ratings.map((d, i) => ({ value: d.count, itemStyle: { color: starColors[i] || '#6b7280', borderRadius: [4, 4, 0, 0] } })),
       type: 'bar',
       barWidth: '50%',
     }],

@@ -1,7 +1,8 @@
 """OPS API - 查询与统计"""
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, func, and_, case
+from sqlalchemy import select, func, and_, case, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 
@@ -17,12 +18,12 @@ router = APIRouter(prefix="/api/ops", tags=["OPS"])
 
 @router.get("/statistics/overview")
 async def statistics_overview(
-    days: int = Query(30, ge=1, le=365),
+    days: Optional[int] = Query(None, ge=1, le=365),
     current_user: User = Depends(require_permission("ops_access")),
     db: AsyncSession = Depends(get_db),
 ):
     """总览统计"""
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
 
     # 总工单数
     total_result = await db.execute(
@@ -81,12 +82,12 @@ async def statistics_overview(
 
 @router.get("/statistics/by-category")
 async def statistics_by_category(
-    days: int = Query(30, ge=1, le=365),
+    days: Optional[int] = Query(None, ge=1, le=365),
     current_user: User = Depends(require_permission("ops_access")),
     db: AsyncSession = Depends(get_db),
 ):
     """按管理单元统计"""
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
 
     result = await db.execute(
         select(
@@ -106,12 +107,12 @@ async def statistics_by_category(
 
 @router.get("/statistics/by-agent")
 async def statistics_by_agent(
-    days: int = Query(30, ge=1, le=365),
+    days: Optional[int] = Query(None, ge=1, le=365),
     current_user: User = Depends(require_permission("ops_access")),
     db: AsyncSession = Depends(get_db),
 ):
     """按客服统计"""
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
 
     result = await db.execute(
         select(
@@ -147,12 +148,12 @@ async def statistics_by_agent(
 
 @router.get("/statistics/ratings")
 async def statistics_ratings(
-    days: int = Query(30, ge=1, le=365),
+    days: Optional[int] = Query(None, ge=1, le=365),
     current_user: User = Depends(require_permission("ops_access")),
     db: AsyncSession = Depends(get_db),
 ):
     """评价统计"""
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
 
     # 评分分布（单次查询）
     dist_result = await db.execute(
@@ -199,12 +200,12 @@ async def statistics_ratings(
 
 @router.get("/statistics/sla-compliance")
 async def sla_compliance(
-    days: int = Query(30, ge=1, le=365),
+    days: Optional[int] = Query(None, ge=1, le=365),
     current_user: User = Depends(require_permission("ops_access")),
     db: AsyncSession = Depends(get_db),
 ):
     """SLA达标率详情"""
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
 
     result = await db.execute(
         select(
@@ -237,12 +238,12 @@ async def sla_compliance(
 
 @router.get("/statistics/trend")
 async def statistics_trend(
-    days: int = Query(30, ge=1, le=365),
+    days: Optional[int] = Query(None, ge=1, le=365),
     current_user: User = Depends(require_permission("ops_access")),
     db: AsyncSession = Depends(get_db),
 ):
     """趋势分析（按天）"""
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
 
     result = await db.execute(
         select(
@@ -259,7 +260,7 @@ async def statistics_trend(
 
 @router.get("/export")
 async def export_tickets(
-    days: int = Query(30, ge=1, le=365),
+    days: Optional[int] = Query(None, ge=1, le=365),
     status: Optional[str] = None,
     category_id: Optional[int] = None,
     keyword: Optional[str] = None,
@@ -269,11 +270,9 @@ async def export_tickets(
     """导出工单报表（支持与列表一致的筛选：状态/管理单元/关键字）"""
     from fastapi.responses import StreamingResponse
     from openpyxl import Workbook
-    from sqlalchemy import or_
-    from sqlalchemy.orm import selectinload
     import io
 
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
 
     conditions = [Ticket.created_at >= since]
     if status:
@@ -349,3 +348,159 @@ async def export_tickets(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=tickets_report.xlsx"},
     )
+
+
+# ==================== 新增端点 ====================
+
+
+@router.get("/tickets")
+async def list_tickets(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status: Optional[str] = None,
+    category_id: Optional[int] = None,
+    keyword: Optional[str] = None,
+    current_user: User = Depends(require_permission("ops_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """OPS工单列表（查看所有工单）"""
+    from app.services.ticket_service import ticket_service
+
+    query = select(Ticket).options(
+        selectinload(Ticket.category),
+        selectinload(Ticket.creator),
+        selectinload(Ticket.assignee),
+    )
+
+    if status:
+        query = query.where(Ticket.status == status)
+    if category_id:
+        query = query.where(Ticket.category_id == category_id)
+    if keyword:
+        safe_kw = escape_like(keyword)
+        query = query.where(
+            or_(
+                Ticket.ticket_no.like(f"%{safe_kw}%", escape="\\"),
+                Ticket.title.like(f"%{safe_kw}%", escape="\\"),
+            )
+        )
+
+    # Count
+    count_query = select(func.count(Ticket.id))
+    if status:
+        count_query = count_query.where(Ticket.status == status)
+    if category_id:
+        count_query = count_query.where(Ticket.category_id == category_id)
+    if keyword:
+        safe_kw = escape_like(keyword)
+        count_query = count_query.where(
+            or_(
+                Ticket.ticket_no.like(f"%{safe_kw}%", escape="\\"),
+                Ticket.title.like(f"%{safe_kw}%", escape="\\"),
+            )
+        )
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.order_by(Ticket.created_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    tickets = result.scalars().all()
+
+    items = []
+    for t in tickets:
+        d = ticket_service._ticket_to_dict(t)
+        d["category_name"] = t.category.name if t.category else None
+        d["creator_name"] = t.creator.name if t.creator else None
+        d["assignee_name"] = t.assignee.name if t.assignee else None
+        items.append(d)
+
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+@router.get("/status-distribution")
+async def status_distribution(
+    days: Optional[int] = Query(None, ge=1, le=365),
+    current_user: User = Depends(require_permission("ops_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """工单状态分布"""
+    conditions = []
+    if days:
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+        conditions.append(Ticket.created_at >= since)
+
+    result = await db.execute(
+        select(Ticket.status, func.count(Ticket.id).label("count"))
+        .where(*conditions)
+        .group_by(Ticket.status)
+    )
+    status_counts = {row.status.value if hasattr(row.status, 'value') else row.status: row.count for row in result.all()}
+    for s in TicketStatus:
+        status_counts.setdefault(s.value, 0)
+    return status_counts
+
+
+@router.get("/category-stats")
+async def category_stats(
+    days: Optional[int] = Query(None, ge=1, le=365),
+    current_user: User = Depends(require_permission("ops_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """管理单元统计（含平均处理时长）"""
+    conditions = []
+    if days:
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+        conditions.append(Ticket.created_at >= since)
+
+    result = await db.execute(
+        select(
+            Category.name,
+            func.count(Ticket.id).label("count"),
+            func.avg(
+                case(
+                    (
+                        and_(Ticket.resolved_at.isnot(None), Ticket.accepted_at.isnot(None)),
+                        func.julianday(Ticket.resolved_at) - func.julianday(Ticket.accepted_at),
+                    ),
+                    else_=None,
+                )
+            ).label("avg_hours"),
+        )
+        .outerjoin(
+            Ticket,
+            and_(Ticket.category_id == Category.id, *conditions),
+        )
+        .group_by(Category.id, Category.name)
+        .order_by(func.count(Ticket.id).desc())
+    )
+
+    return [
+        {
+            "category_name": row[0] or "未分类",
+            "count": row[1],
+            "avg_hours": round(float(row[2]) * 24, 1) if row[2] else 0,
+        }
+        for row in result.all()
+    ]
+
+
+@router.get("/rating-distribution")
+async def rating_distribution(
+    days: Optional[int] = Query(None, ge=1, le=365),
+    current_user: User = Depends(require_permission("ops_access")),
+    db: AsyncSession = Depends(get_db),
+):
+    """评分分布"""
+    conditions = [Ticket.rating.isnot(None)]
+    if days:
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+        conditions.append(Ticket.created_at >= since)
+
+    result = await db.execute(
+        select(Ticket.rating, func.count(Ticket.id).label("count"))
+        .where(*conditions)
+        .group_by(Ticket.rating)
+    )
+    dist_map = {row.rating: row.count for row in result.all()}
+    return {f"rating_{i}": dist_map.get(i, 0) for i in range(1, 6)}

@@ -135,7 +135,7 @@ async function loadTickets() {
     if (filters.status) params.status = filters.status
     if (filters.category_id) params.category_id = filters.category_id
     if (keyword.value) params.keyword = keyword.value
-    const data = await ticketApi.list(params)
+    const data = await opsApi.listTickets(params)
     tickets.value = data.items || []
     total.value = data.total || 0
   } finally { loading.value = false }
@@ -143,7 +143,7 @@ async function loadTickets() {
 
 async function loadCategories() {
   try {
-    const data = await import('@/api').then(m => m.default.get('/admin/categories/'))
+    const data = await import('@/api').then(m => m.default.get('/itsm/categories'))
     categories.value = data || []
   } catch (e) {}
 }
