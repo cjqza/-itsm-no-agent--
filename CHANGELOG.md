@@ -2,6 +2,13 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-25] 评价界面从 Chat.vue 迁移到 ChatRooms.vue
+- **变更**：将用户端评价功能从工单聊天页（Chat.vue）迁移到聊天室页（ChatRooms.vue）。(1) ChatRooms.vue 新增四维评分表单（服务态度/解决方法/解决时间/总体评价），待评价状态下显示评分表单并隐藏聊天输入框，已评价状态下只读展示评价结果，提交评价后自动刷新工单详情和房间列表；新增通过 query 参数 ticket_id 自动选中对应房间的能力。(2) MyTickets.vue 的「去评价」按钮改为跳转 `/chat-rooms?ticket_id=xxx`。(3) Chat.vue 移除全部评价相关代码（模板/脚本/样式共 104 行）。3 个文件变更，+147 / -108。
+- **原因**：评价功能原先嵌在 Chat.vue（/chat/:ticketId）中，与聊天室页面（/chat-rooms）功能重叠且入口分散；迁移到 ChatRooms.vue 后用户在统一的聊天室界面即可完成评价，体验更连贯。
+- **影响**：`frontend-client/src/views/ChatRooms.vue`（新增评价表单+只读展示+query 自动选中）；`frontend-client/src/views/MyTickets.vue`（跳转路径改为 /chat-rooms）；`frontend-client/src/views/Chat.vue`（移除评价相关代码）。纯前端改动，后端无变更。
+- **提交**：`9006087`
+- **测试**：73/73 全部通过。
+
 ## [2026-07-24] P3 全部完成：组件抽取 + Redis 缓存 + Docker + CI/CD + 暗色主题 + 前端测试
 - **变更**：P3 优化全部交付，共 2 个提交、49 个文件变更、净减少 519 行代码（+1632 / -2151），73/73 测试全过。(1) BaseLogin 组件抽取：`shared/components/BaseLogin.vue` 将四端登录页统一为可配置组件，每端 Login.vue 从约 300 行精简至约 65 行。(2) ChatMessage/ChatInput 组件：`shared/components/ChatMessage.vue` + `ChatInput.vue` 统一三个聊天页（AgentChat / Chat / ChatRooms）的消息渲染与输入框。(3) WebSocket composable：`shared/composables/useWebSocket.js` 将三处独立的 WS 连接逻辑统一为 composable，支持自动重连与心跳。(4) store/user.js 统一：`shared/stores/user.js` 提取四端 store 公共基础（token/user/permissions/login/logout/fetchMe），各端仅保留扩展逻辑。(5) Redis 缓存替换：新建 `backend/app/utils/redis.py`（Redis 连接管理器，不可用时自动 fallback 内存）；限流改用 Redis sorted set、Permission 缓存改用 Redis hash（60s TTL）、验证码改用 Redis string + GETDEL，均保留内存 fallback。(6) Docker 化：backend Dockerfile + 4 个前端 Dockerfile + nginx.conf + docker-compose.yml + .dockerignore。(7) CI/CD：`.github/workflows/ci.yml`（backend 测试 + 4 前端构建矩阵）。(8) 前端测试配置：4 个前端添加 Vitest 配置 + test 脚本 + 示例单元测试（status.test.js）。(9) ITSM 暗色主题：`frontend-agent/src/App.vue` 新增暗色模式切换按钮（Sun/Moon 图标），localStorage 持久化偏好。
 - **原因**：四端前端存在大量重复的登录页、聊天组件、WebSocket 连接、用户 store 代码，维护成本高且容易不一致；后端限流/权限/验证码缓存全部依赖内存，重启即丢失且无法水平扩展；项目缺少容器化部署与 CI/CD 流水线；前端无单元测试保障；ITSM 客服长时间工作需要暗色主题护眼。
