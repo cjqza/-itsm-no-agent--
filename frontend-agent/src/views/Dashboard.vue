@@ -226,17 +226,23 @@ onMounted(() => {
 })
 onUnmounted(() => { if (nowTimer) clearInterval(nowTimer) })
 
+// 将后端UTC时间戳转为Date对象（无时区后缀视为UTC）
+function utcDate(t) {
+  if (!t) return new Date()
+  return new Date(typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t) ? t + 'Z' : t)
+}
+
 function getSlaPercent(t) {
   if (!t.sla_deadline || !t.created_at) return 0
   // SLA暂停时，用暂停前的进度
   if (t.is_sla_paused && t.sla_paused_at) {
-    const total = new Date(t.sla_deadline) - new Date(t.created_at)
-    const pausedElapsed = new Date(t.sla_paused_at) - new Date(t.created_at)
+    const total = utcDate(t.sla_deadline) - utcDate(t.created_at)
+    const pausedElapsed = utcDate(t.sla_paused_at) - utcDate(t.created_at)
     const pausedSeconds = t.sla_paused_seconds || 0
     return Math.min(100, Math.round((pausedElapsed - pausedSeconds * 1000) / total * 100))
   }
-  const total = new Date(t.sla_deadline) - new Date(t.created_at)
-  const elapsed = now.value - new Date(t.created_at)
+  const total = utcDate(t.sla_deadline) - utcDate(t.created_at)
+  const elapsed = now.value - utcDate(t.created_at)
   const pausedSeconds = t.sla_paused_seconds || 0
   return Math.min(200, Math.round((elapsed - pausedSeconds * 1000) / total * 100))
 }
