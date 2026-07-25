@@ -43,6 +43,66 @@ async def list_categories_public(
     ]
 
 
+@router.get("/business-modules")
+async def list_business_modules(
+    category_id: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """业务模块列表（按管理单元筛选）"""
+    from app.models.category import BusinessModule
+    query = select(BusinessModule)
+    if category_id:
+        query = query.where(BusinessModule.category_id == category_id)
+    query = query.order_by(BusinessModule.sort_order)
+    result = await db.execute(query)
+    return [{"id": m.id, "name": m.name, "category_id": m.category_id} for m in result.scalars().all()]
+
+
+@router.get("/properties")
+async def list_properties(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """性质列表"""
+    from app.models.category import Property
+    result = await db.execute(select(Property).order_by(Property.id))
+    return [{"id": p.id, "name": p.name} for p in result.scalars().all()]
+
+
+@router.get("/symptoms")
+async def list_symptoms(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """症状列表"""
+    from app.models.category import Symptom
+    result = await db.execute(select(Symptom).order_by(Symptom.id))
+    return [{"id": s.id, "name": s.name} for s in result.scalars().all()]
+
+
+@router.get("/causes")
+async def list_causes(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """原因列表"""
+    from app.models.category import Cause
+    result = await db.execute(select(Cause).order_by(Cause.id))
+    return [{"id": c.id, "name": c.name} for c in result.scalars().all()]
+
+
+@router.get("/solutions")
+async def list_solutions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """解决方法列表"""
+    from app.models.category import Solution
+    result = await db.execute(select(Solution).order_by(Solution.id))
+    return [{"id": s.id, "name": s.name} for s in result.scalars().all()]
+
+
 async def _has_itsm_access(current_user: User) -> bool:
     """内联检查用户是否拥有 itsm_access 权限（复用缓存）"""
     return await has_permission(current_user, "itsm_access")
@@ -273,7 +333,34 @@ async def resolve_ticket(
     current_user: User = Depends(require_permission("itsm_access")),
     db: AsyncSession = Depends(get_db),
 ):
-    """解决工单"""
+    """解决工单（需要先填写完整分类信息）"""
+    # 获取工单
+    result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
+    ticket_obj = result.scalar_one_or_none()
+    if not ticket_obj:
+        raise HTTPException(status_code=404, detail="工单不存在")
+
+    # 校验分类信息完整性
+    missing = []
+    if not ticket_obj.category_id:
+        missing.append("管理单元")
+    if not ticket_obj.business_module_id:
+        missing.append("业务模块")
+    if not ticket_obj.property_id:
+        missing.append("性质")
+    if not ticket_obj.symptom_id:
+        missing.append("症状")
+    if not ticket_obj.cause_id:
+        missing.append("原因")
+    if not ticket_obj.solution_id and not ticket_obj.solution_text:
+        missing.append("解决方法")
+
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"请先填写完整分类信息：{', '.join(missing)}"
+        )
+
     ticket = await ticket_service.update_status(
         db=db,
         ticket_id=ticket_id,

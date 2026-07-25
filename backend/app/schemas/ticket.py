@@ -21,6 +21,7 @@ class TicketUpdate(BaseModel):
     symptom_id: Optional[int] = None
     cause_id: Optional[int] = None
     solution_id: Optional[int] = None
+    solution_text: Optional[str] = Field(None, max_length=500)
     remark: Optional[str] = None
 
 

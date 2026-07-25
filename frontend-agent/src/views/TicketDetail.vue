@@ -182,14 +182,58 @@
         <el-button type="primary" @click="handleRemark">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 性质修改对话框 -->
+    <el-dialog v-model="showClassification" title="性质修改 - 解决工单" width="600px" :close-on-click-modal="false">
+      <div style="margin-bottom: 12px; color: #666; font-size: 13px;">
+        解决工单前，请填写完整的分类信息。所有字段均为必填。
+      </div>
+      <el-form label-width="100px" label-position="right">
+        <el-form-item label="管理单元" required>
+          <el-select v-model="classForm.category_id" placeholder="请选择管理单元" style="width:100%" @change="loadBusinessModules">
+            <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="业务模块" required>
+          <el-select v-model="classForm.business_module_id" placeholder="请选择业务模块" style="width:100%" :disabled="!classForm.category_id">
+            <el-option v-for="m in businessModules" :key="m.id" :label="m.name" :value="m.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="性质" required>
+          <el-select v-model="classForm.property_id" placeholder="请选择性质" style="width:100%">
+            <el-option v-for="p in properties" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="症状" required>
+          <el-select v-model="classForm.symptom_id" placeholder="请选择症状" style="width:100%">
+            <el-option v-for="s in symptoms" :key="s.id" :label="s.name" :value="s.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="原因" required>
+          <el-select v-model="classForm.cause_id" placeholder="请选择原因" style="width:100%">
+            <el-option v-for="c in causes" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="解决方法" required>
+          <el-select v-model="classForm.solution_id" placeholder="选择已有方法（可选）" style="width:100%" clearable>
+            <el-option v-for="s in solutions" :key="s.id" :label="s.name" :value="s.id" />
+          </el-select>
+          <el-input v-model="classForm.solution_text" type="textarea" :rows="2" placeholder="或在此自由描述解决方法..." style="margin-top:8px" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showClassification = false">取消</el-button>
+        <el-button type="success" :loading="operating" @click="handleClassificationSubmit">确认解决</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
-import { ticketApi, chatApi, adminApi } from '@/api'
+import { ticketApi, chatApi, adminApi, classificationApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import { priorityType, slaColor, slaText, slaTagType } from '@shared/utils/status'
 import { formatTime } from '@shared/utils/format'
@@ -222,6 +266,24 @@ const remarkText = ref('')
 const showTransfer = ref(false)
 const transferTarget = ref(null)
 const transferReason = ref('')
+
+// 性质修改对话框
+const showClassification = ref(false)
+const classForm = reactive({
+  category_id: null,
+  business_module_id: null,
+  property_id: null,
+  symptom_id: null,
+  cause_id: null,
+  solution_id: null,
+  solution_text: '',
+})
+const categories = ref([])
+const businessModules = ref([])
+const properties = ref([])
+const symptoms = ref([])
+const causes = ref([])
+const solutions = ref([])
 
 // Bug #14: SLA 百分比实时更新
 const now = ref(Date.now())
@@ -321,11 +383,75 @@ async function handleStatus(status) {
 }
 
 async function handleResolve() {
+  // 打开性质修改对话框
+  await loadClassificationData()
+  // 预填当前工单的分类信息
+  classForm.category_id = ticket.value.category_id || null
+  classForm.business_module_id = ticket.value.business_module_id || null
+  classForm.property_id = ticket.value.property_id || null
+  classForm.symptom_id = ticket.value.symptom_id || null
+  classForm.cause_id = ticket.value.cause_id || null
+  classForm.solution_id = ticket.value.solution_id || null
+  classForm.solution_text = ticket.value.solution_text || ''
+  showClassification.value = true
+}
+
+async function loadClassificationData() {
   try {
+    const [cats, props, syms, causes, sols] = await Promise.all([
+      classificationApi.getCategories(),
+      classificationApi.getProperties(),
+      classificationApi.getSymptoms(),
+      classificationApi.getCauses(),
+      classificationApi.getSolutions(),
+    ])
+    categories.value = cats || []
+    properties.value = props || []
+    symptoms.value = syms || []
+    causes.value = causes || []
+    solutions.value = sols || []
+  } catch (e) { ElMessage.error('加载分类数据失败') }
+}
+
+async function loadBusinessModules() {
+  if (!classForm.category_id) { businessModules.value = []; return }
+  try {
+    const res = await classificationApi.getBusinessModules(classForm.category_id)
+    businessModules.value = res || []
+  } catch (e) { businessModules.value = [] }
+}
+
+async function handleClassificationSubmit() {
+  // 校验必填
+  if (!classForm.category_id) { ElMessage.warning('请选择管理单元'); return }
+  if (!classForm.business_module_id) { ElMessage.warning('请选择业务模块'); return }
+  if (!classForm.property_id) { ElMessage.warning('请选择性质'); return }
+  if (!classForm.symptom_id) { ElMessage.warning('请选择症状'); return }
+  if (!classForm.cause_id) { ElMessage.warning('请选择原因'); return }
+  if (!classForm.solution_id && !classForm.solution_text.trim()) { ElMessage.warning('请选择或填写解决方法'); return }
+
+  operating.value = true
+  try {
+    // 先更新分类信息
+    await ticketApi.update(ticketId, {
+      category_id: classForm.category_id,
+      business_module_id: classForm.business_module_id,
+      property_id: classForm.property_id,
+      symptom_id: classForm.symptom_id,
+      cause_id: classForm.cause_id,
+      solution_id: classForm.solution_id || null,
+      solution_text: classForm.solution_text.trim() || null,
+    })
+    // 再解决工单
     await ticketApi.resolve(ticketId)
     ElMessage.success('已标记为待评价')
+    showClassification.value = false
     await loadAll()
-  } catch (e) { ElMessage.error('操作失败') }
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || '操作失败')
+  } finally {
+    operating.value = false
+  }
 }
 
 async function handleTransfer() {

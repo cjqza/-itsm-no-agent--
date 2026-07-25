@@ -443,6 +443,7 @@ class TicketService:
             "cause_name": safe_rel_name(ticket, "cause"),
             "solution_id": ticket.solution_id,
             "solution_name": safe_rel_name(ticket, "solution"),
+            "solution_text": ticket.solution_text,
             "creator_id": ticket.creator_id,
             "creator_name": safe_rel_name(ticket, "creator"),
             "assignee_id": ticket.assignee_id,

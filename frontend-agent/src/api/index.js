@@ -43,6 +43,15 @@ export const adminApi = {
   createPermissionRequest: (data) => api.post('/admin/permission-requests', null, { params: data }),
 }
 
+export const classificationApi = {
+  getCategories: () => api.get('/itsm/categories'),
+  getBusinessModules: (categoryId) => api.get('/itsm/business-modules', { params: categoryId ? { category_id: categoryId } : {} }),
+  getProperties: () => api.get('/itsm/properties'),
+  getSymptoms: () => api.get('/itsm/symptoms'),
+  getCauses: () => api.get('/itsm/causes'),
+  getSolutions: () => api.get('/itsm/solutions'),
+}
+
 export const templateApi = {
   list: (category) => api.get('/templates', { params: category ? { category } : {} }),
   create: (data) => api.post('/templates', data),

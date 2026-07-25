@@ -51,6 +51,7 @@ class Ticket(Base):
     symptom_id = Column(Integer, ForeignKey("symptoms.id"), nullable=True)
     cause_id = Column(Integer, ForeignKey("causes.id"), nullable=True)
     solution_id = Column(Integer, ForeignKey("solutions.id"), nullable=True)
+    solution_text = Column(String(500), nullable=True)  # 自由填写的解决方法
 
     # 人员
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
