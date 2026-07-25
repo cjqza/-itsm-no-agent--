@@ -111,21 +111,94 @@ async def seed():
             (categories[3].id, "笔记本电脑"), (categories[3].id, "台式电脑"), (categories[3].id, "打印机"),
             (categories[4].id, "密码重置"), (categories[4].id, "权限申请"),
         ]
+        business_modules = []
         for i, (cid, name) in enumerate(modules_data):
-            db.add(BusinessModule(category_id=cid, name=name, sort_order=i, created_by=admin.id))
+            bm = BusinessModule(category_id=cid, name=name, sort_order=i, created_by=admin.id)
+            db.add(bm)
+            business_modules.append(bm)
 
-        # ============ 性质/症状/原因/解决方法 ============
+        await db.flush()  # 获取业务模块ID
+
+        # ============ 性质（全局，不绑定业务模块） ============
         for name in ["故障", "需求", "咨询", "变更", "投诉"]:
             db.add(Property(name=name, created_by=admin.id))
 
-        for name in ["蓝屏", "死机", "卡顿", "无法开机", "无法连接网络", "无法收发邮件", "软件闪退", "打印异常", "无法登录"]:
-            db.add(Symptom(name=name, created_by=admin.id))
+        # ============ 症状/原因/解决方法（绑定业务模块） ============
+        # 按业务模块分配症状/原因/解决方法
+        bm_data = {
+            # 业务模块名称: {症状列表, 原因列表, 解决方法列表}
+            "Windows系统": {
+                "symptoms": ["蓝屏", "死机", "卡顿", "无法开机"],
+                "causes": ["系统文件损坏", "驱动冲突", "内存不足", "配置错误"],
+                "solutions": ["重启电脑", "重装系统", "更新驱动", "系统还原"],
+            },
+            "Mac系统": {
+                "symptoms": ["死机", "卡顿", "无法开机"],
+                "causes": ["系统文件损坏", "内存不足"],
+                "solutions": ["重启电脑", "重装系统", "磁盘修复"],
+            },
+            "Outlook客户端": {
+                "symptoms": ["无法收发邮件", "邮件丢失", "附件打不开"],
+                "causes": ["配置错误", "软件版本不兼容", "网络问题"],
+                "solutions": ["重新配置账号", "更新软件", "清除缓存"],
+            },
+            "邮件服务器": {
+                "symptoms": ["无法收发邮件", "邮件延迟"],
+                "causes": ["服务器故障", "配置错误"],
+                "solutions": ["联系管理员", "重启服务"],
+            },
+            "有线网络": {
+                "symptoms": ["无法连接网络", "网络断断续续"],
+                "causes": ["网线故障", "交换机故障", "配置错误"],
+                "solutions": ["更换网线", "重启交换机", "修改配置"],
+            },
+            "WiFi": {
+                "symptoms": ["无法连接WiFi", "信号弱"],
+                "causes": ["AP故障", "配置错误", "信号干扰"],
+                "solutions": ["重启AP", "修改配置", "调整位置"],
+            },
+            "VPN": {
+                "symptoms": ["VPN连接失败", "VPN断连"],
+                "causes": ["配置错误", "网络问题", "账号被锁定"],
+                "solutions": ["重新配置", "重置密码", "联系管理员"],
+            },
+            "笔记本电脑": {
+                "symptoms": ["无法开机", "屏幕不亮", "电池不充电"],
+                "causes": ["硬件故障", "电池老化", "主板问题"],
+                "solutions": ["更换电池", "现场处理", "返厂维修"],
+            },
+            "台式电脑": {
+                "symptoms": ["无法开机", "蓝屏", "噪音大"],
+                "causes": ["硬件故障", "内存不足", "灰尘堆积"],
+                "solutions": ["重启电脑", "增加内存", "清理灰尘"],
+            },
+            "打印机": {
+                "symptoms": ["打印异常", "无法打印", "卡纸"],
+                "causes": ["缺纸", "墨盒耗尽", "驱动故障"],
+                "solutions": ["添加纸张", "更换墨盒", "重新安装驱动"],
+            },
+            "密码重置": {
+                "symptoms": ["无法登录", "密码过期"],
+                "causes": ["密码过期", "账号被锁定"],
+                "solutions": ["重置密码", "解锁账号"],
+            },
+            "权限申请": {
+                "symptoms": ["无权限访问", "权限不足"],
+                "causes": ["权限未开通", "权限过期"],
+                "solutions": ["申请权限", "联系管理员"],
+            },
+        }
 
-        for name in ["系统文件损坏", "驱动冲突", "内存不足", "配置错误", "网络设备故障", "账号被锁定", "软件版本不兼容", "操作失误"]:
-            db.add(Cause(name=name, created_by=admin.id))
-
-        for name in ["重启电脑", "重装系统", "更新驱动", "重置密码", "修改配置", "重新安装软件", "远程协助", "现场处理"]:
-            db.add(Solution(name=name, created_by=admin.id))
+        for bm_name, data in bm_data.items():
+            bm = next((b for b in business_modules if b.name == bm_name), None)
+            if not bm:
+                continue
+            for name in data["symptoms"]:
+                db.add(Symptom(name=name, business_module_id=bm.id, created_by=admin.id))
+            for name in data["causes"]:
+                db.add(Cause(name=name, business_module_id=bm.id, created_by=admin.id))
+            for name in data["solutions"]:
+                db.add(Solution(name=name, business_module_id=bm.id, created_by=admin.id))
 
         await db.flush()
 

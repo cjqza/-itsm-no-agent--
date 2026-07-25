@@ -72,35 +72,50 @@ async def list_properties(
 
 @router.get("/symptoms")
 async def list_symptoms(
+    business_module_id: Optional[int] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """症状列表"""
+    """症状列表（按业务模块筛选）"""
     from app.models.category import Symptom
-    result = await db.execute(select(Symptom).order_by(Symptom.id))
-    return [{"id": s.id, "name": s.name} for s in result.scalars().all()]
+    query = select(Symptom)
+    if business_module_id:
+        query = query.where(Symptom.business_module_id == business_module_id)
+    query = query.order_by(Symptom.id)
+    result = await db.execute(query)
+    return [{"id": s.id, "name": s.name, "business_module_id": s.business_module_id} for s in result.scalars().all()]
 
 
 @router.get("/causes")
 async def list_causes(
+    business_module_id: Optional[int] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """原因列表"""
+    """原因列表（按业务模块筛选）"""
     from app.models.category import Cause
-    result = await db.execute(select(Cause).order_by(Cause.id))
-    return [{"id": c.id, "name": c.name} for c in result.scalars().all()]
+    query = select(Cause)
+    if business_module_id:
+        query = query.where(Cause.business_module_id == business_module_id)
+    query = query.order_by(Cause.id)
+    result = await db.execute(query)
+    return [{"id": c.id, "name": c.name, "business_module_id": c.business_module_id} for c in result.scalars().all()]
 
 
 @router.get("/solutions")
 async def list_solutions(
+    business_module_id: Optional[int] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """解决方法列表"""
+    """解决方法列表（按业务模块筛选）"""
     from app.models.category import Solution
-    result = await db.execute(select(Solution).order_by(Solution.id))
-    return [{"id": s.id, "name": s.name} for s in result.scalars().all()]
+    query = select(Solution)
+    if business_module_id:
+        query = query.where(Solution.business_module_id == business_module_id)
+    query = query.order_by(Solution.id)
+    result = await db.execute(query)
+    return [{"id": s.id, "name": s.name, "business_module_id": s.business_module_id} for s in result.scalars().all()]
 
 
 async def _has_itsm_access(current_user: User) -> bool:

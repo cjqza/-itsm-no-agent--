@@ -195,7 +195,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="业务模块" required>
-          <el-select v-model="classForm.business_module_id" placeholder="请选择业务模块" style="width:100%" :disabled="!classForm.category_id">
+          <el-select v-model="classForm.business_module_id" placeholder="请选择业务模块" style="width:100%" :disabled="!classForm.category_id" @change="onBusinessModuleChange">
             <el-option v-for="m in businessModules" :key="m.id" :label="m.name" :value="m.id" />
           </el-select>
         </el-form-item>
@@ -397,23 +397,21 @@ async function handleResolve() {
   if (classForm.category_id) {
     await loadBusinessModules()
   }
+  // 如果有预填的业务模块，加载对应的症状/原因/解决方法
+  if (classForm.business_module_id) {
+    await loadSymptomsCausesSolutions()
+  }
   showClassification.value = true
 }
 
 async function loadClassificationData() {
   try {
-    const [cats, props, syms, causeList, solList] = await Promise.all([
+    const [cats, props] = await Promise.all([
       classificationApi.getCategories(),
       classificationApi.getProperties(),
-      classificationApi.getSymptoms(),
-      classificationApi.getCauses(),
-      classificationApi.getSolutions(),
     ])
     categories.value = cats || []
     properties.value = props || []
-    symptoms.value = syms || []
-    causes.value = causeList || []
-    solutions.value = solList || []
   } catch (e) { ElMessage.error('加载分类数据失败') }
 }
 
@@ -423,6 +421,34 @@ async function loadBusinessModules() {
     const res = await classificationApi.getBusinessModules(classForm.category_id)
     businessModules.value = res || []
   } catch (e) { businessModules.value = [] }
+}
+
+async function onBusinessModuleChange() {
+  // 切换业务模块时，清空依赖字段并重新加载
+  classForm.symptom_id = null
+  classForm.cause_id = null
+  classForm.solution_id = null
+  classForm.solution_text = ''
+  await loadSymptomsCausesSolutions()
+}
+
+async function loadSymptomsCausesSolutions() {
+  if (!classForm.business_module_id) {
+    symptoms.value = []
+    causes.value = []
+    solutions.value = []
+    return
+  }
+  try {
+    const [syms, causeList, solList] = await Promise.all([
+      classificationApi.getSymptoms(classForm.business_module_id),
+      classificationApi.getCauses(classForm.business_module_id),
+      classificationApi.getSolutions(classForm.business_module_id),
+    ])
+    symptoms.value = syms || []
+    causes.value = causeList || []
+    solutions.value = solList || []
+  } catch (e) { ElMessage.error('加载分类数据失败') }
 }
 
 async function handleClassificationSubmit() {

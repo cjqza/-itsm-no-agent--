@@ -48,6 +48,9 @@ class BusinessModule(Base):
     # Relationships
     category = relationship("Category", back_populates="business_modules")
     tickets = relationship("Ticket", back_populates="business_module")
+    symptoms = relationship("Symptom", back_populates="business_module")
+    causes = relationship("Cause", back_populates="business_module")
+    solutions = relationship("Solution", back_populates="business_module")
     creator = relationship("User", foreign_keys=[created_by])
 
 
@@ -73,14 +76,16 @@ class Symptom(Base):
     __tablename__ = "symptoms"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(128), unique=True, nullable=False)
+    name = Column(String(128), nullable=False)
     description = Column(Text, nullable=True)
+    business_module_id = Column(Integer, ForeignKey("business_modules.id"), nullable=True, index=True)
     sort_order = Column(Integer, default=0)
     status = Column(SQLEnum(StatusEnum), default=StatusEnum.ACTIVE)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    business_module = relationship("BusinessModule", back_populates="symptoms")
     tickets = relationship("Ticket", back_populates="symptom")
     creator = relationship("User", foreign_keys=[created_by])
 
@@ -90,14 +95,16 @@ class Cause(Base):
     __tablename__ = "causes"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(128), unique=True, nullable=False)
+    name = Column(String(128), nullable=False)
     description = Column(Text, nullable=True)
+    business_module_id = Column(Integer, ForeignKey("business_modules.id"), nullable=True, index=True)
     sort_order = Column(Integer, default=0)
     status = Column(SQLEnum(StatusEnum), default=StatusEnum.ACTIVE)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    business_module = relationship("BusinessModule", back_populates="causes")
     tickets = relationship("Ticket", back_populates="cause")
     creator = relationship("User", foreign_keys=[created_by])
 
@@ -107,13 +114,15 @@ class Solution(Base):
     __tablename__ = "solutions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(128), unique=True, nullable=False)
+    name = Column(String(128), nullable=False)
     description = Column(Text, nullable=True)
+    business_module_id = Column(Integer, ForeignKey("business_modules.id"), nullable=True, index=True)
     sort_order = Column(Integer, default=0)
     status = Column(SQLEnum(StatusEnum), default=StatusEnum.ACTIVE)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    business_module = relationship("BusinessModule", back_populates="solutions")
     tickets = relationship("Ticket", back_populates="solution")
     creator = relationship("User", foreign_keys=[created_by])

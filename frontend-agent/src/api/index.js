@@ -47,9 +47,9 @@ export const classificationApi = {
   getCategories: () => api.get('/itsm/categories'),
   getBusinessModules: (categoryId) => api.get('/itsm/business-modules', { params: categoryId ? { category_id: categoryId } : {} }),
   getProperties: () => api.get('/itsm/properties'),
-  getSymptoms: () => api.get('/itsm/symptoms'),
-  getCauses: () => api.get('/itsm/causes'),
-  getSolutions: () => api.get('/itsm/solutions'),
+  getSymptoms: (businessModuleId) => api.get('/itsm/symptoms', { params: businessModuleId ? { business_module_id: businessModuleId } : {} }),
+  getCauses: (businessModuleId) => api.get('/itsm/causes', { params: businessModuleId ? { business_module_id: businessModuleId } : {} }),
+  getSolutions: (businessModuleId) => api.get('/itsm/solutions', { params: businessModuleId ? { business_module_id: businessModuleId } : {} }),
 }
 
 export const templateApi = {
