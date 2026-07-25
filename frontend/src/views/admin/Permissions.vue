@@ -249,56 +249,113 @@
       </template>
     </el-dialog>
 
-    <!-- 升级为客服对话框 -->
+    <!-- 客服管理对话框 -->
     <el-dialog
       v-model="dialogVisible"
-      title="升级为客服"
-      width="520px"
+      title="客服管理"
+      width="560px"
       :close-on-click-modal="false"
       @closed="resetForm"
     >
-      <div style="margin-bottom: 16px;">
-        <el-input
-          v-model="upgradeSearch"
-          placeholder="搜索用户姓名、账号、手机号"
-          clearable
-          @input="searchUsersForUpgrade"
-        >
-          <template #prefix><el-icon><Search /></el-icon></template>
-        </el-input>
-      </div>
-      <el-table
-        ref="upgradeTableRef"
-        :data="upgradeUsers"
-        max-height="300"
-        @selection-change="handleUpgradeSelectionChange"
-        style="width: 100%"
-        v-loading="upgradeLoading"
-      >
-        <el-table-column type="selection" width="50" />
-        <el-table-column prop="login_id" label="账号" width="100" />
-        <el-table-column prop="name" label="姓名" width="100" />
-        <el-table-column prop="phone" label="手机号" width="130" />
-        <el-table-column prop="role" label="角色" width="80">
-          <template #default="{ row }">
-            <el-tag size="small">{{ roleText(row.role) }}</el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
-      <div v-if="selectedUpgradeUsers.length > 0" style="margin-top: 12px; padding: 8px; background: #f0f9ff; border-radius: 4px;">
-        已选择 <strong>{{ selectedUpgradeUsers.length }}</strong> 个用户：
-        <span v-for="(u, idx) in selectedUpgradeUsers" :key="u.id">
-          {{ u.name }}（{{ u.login_id }}）{{ idx < selectedUpgradeUsers.length - 1 ? '、' : '' }}
-        </span>
-      </div>
+      <el-tabs v-model="agentDialogTab">
+        <!-- 升级为客服 -->
+        <el-tab-pane label="升级为客服" name="upgrade">
+          <div style="margin-bottom: 12px;">
+            <el-input
+              v-model="upgradeSearch"
+              placeholder="搜索用户姓名、账号、手机号"
+              clearable
+              @input="searchUsersForUpgrade"
+            >
+              <template #prefix><el-icon><Search /></el-icon></template>
+            </el-input>
+          </div>
+          <el-table
+            ref="upgradeTableRef"
+            :data="upgradeUsers"
+            max-height="280"
+            @selection-change="handleUpgradeSelectionChange"
+            style="width: 100%"
+            v-loading="upgradeLoading"
+          >
+            <el-table-column type="selection" width="50" />
+            <el-table-column prop="login_id" label="账号" width="100" />
+            <el-table-column prop="name" label="姓名" width="100" />
+            <el-table-column prop="phone" label="手机号" width="130" />
+            <el-table-column prop="role" label="角色" width="80">
+              <template #default="{ row }">
+                <el-tag size="small">{{ roleText(row.role) }}</el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-if="selectedUpgradeUsers.length > 0" style="margin-top: 12px; padding: 8px; background: #f0f9ff; border-radius: 4px; font-size: 13px;">
+            已选择 <strong>{{ selectedUpgradeUsers.length }}</strong> 个用户：
+            <span v-for="(u, idx) in selectedUpgradeUsers" :key="u.id">
+              {{ u.name }}（{{ u.login_id }}）{{ idx < selectedUpgradeUsers.length - 1 ? '、' : '' }}
+            </span>
+          </div>
+          <div style="text-align: right; margin-top: 12px;">
+            <el-button
+              type="primary"
+              size="small"
+              :loading="submitting"
+              :disabled="selectedUpgradeUsers.length === 0"
+              @click="handleBatchUpgrade"
+            >升级为客服（{{ selectedUpgradeUsers.length }}）</el-button>
+          </div>
+        </el-tab-pane>
+
+        <!-- 取消客服 -->
+        <el-tab-pane label="取消客服" name="downgrade">
+          <div style="margin-bottom: 12px;">
+            <el-input
+              v-model="downgradeSearch"
+              placeholder="搜索客服姓名、账号、手机号"
+              clearable
+              @input="searchAgentsForDowngrade"
+            >
+              <template #prefix><el-icon><Search /></el-icon></template>
+            </el-input>
+          </div>
+          <el-table
+            ref="downgradeTableRef"
+            :data="downgradeAgents"
+            max-height="280"
+            @selection-change="handleDowngradeSelectionChange"
+            style="width: 100%"
+            v-loading="downgradeLoading"
+          >
+            <el-table-column type="selection" width="50" />
+            <el-table-column prop="login_id" label="账号" width="100" />
+            <el-table-column prop="name" label="姓名" width="100" />
+            <el-table-column prop="phone" label="手机号" width="130" />
+            <el-table-column prop="status" label="状态" width="80">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">
+                  {{ row.status === 'active' ? '正常' : '已禁用' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-if="selectedDowngradeAgents.length > 0" style="margin-top: 12px; padding: 8px; background: #fef2f2; border-radius: 4px; font-size: 13px;">
+            已选择 <strong>{{ selectedDowngradeAgents.length }}</strong> 个客服：
+            <span v-for="(u, idx) in selectedDowngradeAgents" :key="u.id">
+              {{ u.name }}（{{ u.login_id }}）{{ idx < selectedDowngradeAgents.length - 1 ? '、' : '' }}
+            </span>
+          </div>
+          <div style="text-align: right; margin-top: 12px;">
+            <el-button
+              type="danger"
+              size="small"
+              :loading="submitting"
+              :disabled="selectedDowngradeAgents.length === 0"
+              @click="handleBatchDowngrade"
+            >取消客服（{{ selectedDowngradeAgents.length }}）</el-button>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="submitting"
-          :disabled="selectedUpgradeUsers.length === 0"
-          @click="handleBatchUpgrade"
-        >升级为客服（{{ selectedUpgradeUsers.length }}）</el-button>
+        <el-button @click="dialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
 
@@ -451,6 +508,14 @@ const upgradeLoading = ref(false)
 const upgradeSearch = ref('')
 const selectedUpgradeUsers = ref([])
 const upgradeTableRef = ref(null)
+const agentDialogTab = ref('upgrade')
+
+// 取消客服相关
+const downgradeAgents = ref([])
+const downgradeLoading = ref(false)
+const downgradeSearch = ref('')
+const selectedDowngradeAgents = ref([])
+const downgradeTableRef = ref(null)
 
 async function searchUsersForUpgrade() {
   upgradeLoading.value = true
@@ -471,6 +536,69 @@ async function searchUsersForUpgrade() {
 
 function handleUpgradeSelectionChange(selection) {
   selectedUpgradeUsers.value = selection
+}
+
+async function searchAgentsForDowngrade() {
+  downgradeLoading.value = true
+  try {
+    const params = { role: 'agent', page_size: 50 }
+    if (downgradeSearch.value.trim()) {
+      params.keyword = downgradeSearch.value.trim()
+    }
+    const res = await adminApi.getUsers(params)
+    downgradeAgents.value = res?.items || []
+  } catch (e) {
+    ElMessage.error('加载客服列表失败')
+    downgradeAgents.value = []
+  } finally {
+    downgradeLoading.value = false
+  }
+}
+
+function handleDowngradeSelectionChange(selection) {
+  selectedDowngradeAgents.value = selection
+}
+
+async function handleBatchDowngrade() {
+  if (selectedDowngradeAgents.value.length === 0) {
+    ElMessage.warning('请选择要取消的客服')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确定要取消 ${selectedDowngradeAgents.value.length} 个客服的权限吗？`,
+      '操作确认',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  submitting.value = true
+  const agents = [...selectedDowngradeAgents.value]
+  let successCount = 0
+  let failCount = 0
+  try {
+    for (const agent of agents) {
+      try {
+        await adminApi.downgradeToUser(agent.id)
+        successCount++
+      } catch (e) {
+        failCount++
+      }
+    }
+    if (successCount > 0) {
+      ElMessage.success(`已取消 ${successCount} 个客服权限`)
+    }
+    if (failCount > 0) {
+      ElMessage.warning(`${failCount} 个操作失败`)
+    }
+    dialogVisible.value = false
+    await loadUsers()
+  } catch (e) {
+    ElMessage.error('批量操作失败')
+  } finally {
+    submitting.value = false
+  }
 }
 
 async function handleBatchUpgrade() {
@@ -626,11 +754,15 @@ async function openAddDialog() {
     isEditMode.value = false
     editingUserId.value = null
     resetFormData()
+    agentDialogTab.value = 'upgrade'
     upgradeSearch.value = ''
     selectedUpgradeUsers.value = []
     upgradeUsers.value = []
+    downgradeSearch.value = ''
+    selectedDowngradeAgents.value = []
+    downgradeAgents.value = []
     dialogVisible.value = true
-    await searchUsersForUpgrade()
+    await Promise.all([searchUsersForUpgrade(), searchAgentsForDowngrade()])
   } catch (e) {
     ElMessage.error('打开对话框失败')
   }
