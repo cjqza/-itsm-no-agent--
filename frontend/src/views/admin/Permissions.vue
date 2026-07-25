@@ -268,13 +268,14 @@
         </el-input>
       </div>
       <el-table
+        ref="upgradeTableRef"
         :data="upgradeUsers"
         max-height="300"
-        highlight-current-row
-        @current-change="handleUpgradeUserSelect"
+        @selection-change="handleUpgradeSelectionChange"
         style="width: 100%"
         v-loading="upgradeLoading"
       >
+        <el-table-column type="selection" width="50" />
         <el-table-column prop="login_id" label="账号" width="100" />
         <el-table-column prop="name" label="姓名" width="100" />
         <el-table-column prop="phone" label="手机号" width="130" />
@@ -284,17 +285,20 @@
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="selectedUpgradeUser" style="margin-top: 12px; padding: 8px; background: #f0f9ff; border-radius: 4px;">
-        已选择：<strong>{{ selectedUpgradeUser.name }}</strong>（{{ selectedUpgradeUser.login_id }}）
+      <div v-if="selectedUpgradeUsers.length > 0" style="margin-top: 12px; padding: 8px; background: #f0f9ff; border-radius: 4px;">
+        已选择 <strong>{{ selectedUpgradeUsers.length }}</strong> 个用户：
+        <span v-for="(u, idx) in selectedUpgradeUsers" :key="u.id">
+          {{ u.name }}（{{ u.login_id }}）{{ idx < selectedUpgradeUsers.length - 1 ? '、' : '' }}
+        </span>
       </div>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button
           type="primary"
           :loading="submitting"
-          :disabled="!selectedUpgradeUser"
-          @click="handleUpgrade"
-        >升级为客服</el-button>
+          :disabled="selectedUpgradeUsers.length === 0"
+          @click="handleBatchUpgrade"
+        >升级为客服（{{ selectedUpgradeUsers.length }}）</el-button>
       </template>
     </el-dialog>
 
@@ -445,7 +449,8 @@ const formRules = {
 const upgradeUsers = ref([])
 const upgradeLoading = ref(false)
 const upgradeSearch = ref('')
-const selectedUpgradeUser = ref(null)
+const selectedUpgradeUsers = ref([])
+const upgradeTableRef = ref(null)
 
 async function searchUsersForUpgrade() {
   upgradeLoading.value = true
@@ -464,23 +469,38 @@ async function searchUsersForUpgrade() {
   }
 }
 
-function handleUpgradeUserSelect(row) {
-  selectedUpgradeUser.value = row
+function handleUpgradeSelectionChange(selection) {
+  selectedUpgradeUsers.value = selection
 }
 
-async function handleUpgrade() {
-  if (!selectedUpgradeUser.value) {
+async function handleBatchUpgrade() {
+  if (selectedUpgradeUsers.value.length === 0) {
     ElMessage.warning('请选择要升级的用户')
     return
   }
   submitting.value = true
+  const users = [...selectedUpgradeUsers.value]
+  let successCount = 0
+  let failCount = 0
   try {
-    await adminApi.upgradeToAgent(selectedUpgradeUser.value.id)
-    ElMessage.success(`已将 ${selectedUpgradeUser.value.name} 升级为客服`)
+    for (const user of users) {
+      try {
+        await adminApi.upgradeToAgent(user.id)
+        successCount++
+      } catch (e) {
+        failCount++
+      }
+    }
+    if (successCount > 0) {
+      ElMessage.success(`已成功升级 ${successCount} 个用户为客服`)
+    }
+    if (failCount > 0) {
+      ElMessage.warning(`${failCount} 个用户升级失败（可能已是客服）`)
+    }
     dialogVisible.value = false
     await loadUsers()
   } catch (e) {
-    // error handled by interceptor
+    ElMessage.error('批量升级失败')
   } finally {
     submitting.value = false
   }
@@ -607,7 +627,7 @@ async function openAddDialog() {
     editingUserId.value = null
     resetFormData()
     upgradeSearch.value = ''
-    selectedUpgradeUser.value = null
+    selectedUpgradeUsers.value = []
     upgradeUsers.value = []
     dialogVisible.value = true
     await searchUsersForUpgrade()
