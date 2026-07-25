@@ -192,7 +192,7 @@
       </div>
       <el-form label-width="100px" label-position="right">
         <el-form-item label="管理单元" required>
-          <el-select v-model="classForm.category_id" placeholder="请选择管理单元" style="width:100%" @change="loadBusinessModules">
+          <el-select v-model="classForm.category_id" placeholder="请选择管理单元" style="width:100%" @change="onCategoryChange">
             <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
           </el-select>
         </el-form-item>
@@ -428,6 +428,20 @@ async function loadClassificationData() {
     categories.value = cats || []
     properties.value = props || []
   } catch (e) { ElMessage.error('加载分类数据失败') }
+}
+
+async function onCategoryChange() {
+  // 切换管理单元时，清空业务模块及所有依赖字段
+  classForm.business_module_id = null
+  classForm.symptom_id = null
+  classForm.cause_id = null
+  classForm.solution_id = null
+  classForm.solution_text = ''
+  businessModules.value = []
+  symptoms.value = []
+  causes.value = []
+  solutions.value = []
+  await loadBusinessModules()
 }
 
 async function loadBusinessModules() {
