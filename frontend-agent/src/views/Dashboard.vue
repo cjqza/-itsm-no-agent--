@@ -103,12 +103,15 @@
               <div class="ticket-list">
                 <div v-for="t in myProcessingTickets" :key="t.id" class="ticket-item" @click="goToDetail(t)">
                   <div class="ticket-left">
-                    <div class="sla-bar" :style="{ background: slaColor(t.sla_status) }"></div>
+                    <div class="sla-bar" :style="{ background: getSlaColor(getSlaPercent(t)) }"></div>
                   </div>
                   <div class="ticket-body">
                     <div class="ticket-title">{{ t.ticket_no }} - {{ t.title }}</div>
                     <div class="sla-progress">
-                      <el-progress :percentage="getSlaPercent(t)" :color="slaColor(t.sla_status)" :stroke-width="6" />
+                      <el-progress :percentage="Math.min(100, getSlaPercent(t))" :color="getSlaColor(getSlaPercent(t))" :stroke-width="6" />
+                      <span class="sla-text" :style="{ color: getSlaColor(getSlaPercent(t)) }">
+                        {{ getSlaStatusText(getSlaPercent(t)) }}
+                      </span>
                     </div>
                   </div>
                   <el-tag :type="statusTagType(t.status)" size="small">{{ statusText(t.status) }}</el-tag>
@@ -214,11 +217,42 @@ async function handleAccept(ticket) {
 
 function goToDetail(t) { router.push(`/tickets/${t.id}`) }
 
+// 实时时间戳（每分钟刷新）
+const now = ref(Date.now())
+let nowTimer = null
+
+onMounted(() => {
+  nowTimer = setInterval(() => { now.value = Date.now() }, 60000)
+})
+onUnmounted(() => { if (nowTimer) clearInterval(nowTimer) })
+
 function getSlaPercent(t) {
   if (!t.sla_deadline || !t.created_at) return 0
+  // SLA暂停时，用暂停前的进度
+  if (t.is_sla_paused && t.sla_paused_at) {
+    const total = new Date(t.sla_deadline) - new Date(t.created_at)
+    const pausedElapsed = new Date(t.sla_paused_at) - new Date(t.created_at)
+    const pausedSeconds = t.sla_paused_seconds || 0
+    return Math.min(100, Math.round((pausedElapsed - pausedSeconds * 1000) / total * 100))
+  }
   const total = new Date(t.sla_deadline) - new Date(t.created_at)
-  const elapsed = Date.now() - new Date(t.created_at)
-  return Math.min(100, Math.round(elapsed / total * 100))
+  const elapsed = now.value - new Date(t.created_at)
+  const pausedSeconds = t.sla_paused_seconds || 0
+  return Math.min(200, Math.round((elapsed - pausedSeconds * 1000) / total * 100))
+}
+
+function getSlaColor(percent) {
+  if (percent >= 100) return '#333'    // 黑色：超时
+  if (percent >= 80) return '#f56c6c'  // 红色：80%+
+  if (percent >= 50) return '#e6a23c'  // 黄色：50%+
+  return '#67c23a'                     // 绿色：正常
+}
+
+function getSlaStatusText(percent) {
+  if (percent >= 100) return '已超时'
+  if (percent >= 80) return '即将超时'
+  if (percent >= 50) return '注意'
+  return '正常'
 }
 
 </script>
@@ -268,7 +302,8 @@ function getSlaPercent(t) {
 .ticket-body { flex: 1; min-width: 0; }
 .ticket-title { font-size: 13px; color: #1e293b; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ticket-meta { font-size: 12px; color: #94a3b8; display: flex; gap: 12px; margin-top: 4px; }
-.sla-progress { width: 120px; margin-top: 4px; }
+.sla-progress { width: 120px; margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
+.sla-text { font-size: 11px; font-weight: 500; }
 
 @media (max-width: 768px) {
   .dashboard :deep(.el-col-12) {
