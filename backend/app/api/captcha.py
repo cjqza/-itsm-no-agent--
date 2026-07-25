@@ -36,8 +36,12 @@ def _cleanup_expired():
 
 
 def _generate_text(length: int = 4) -> str:
-    """生成随机验证码文本（字母+数字，排除易混淆字符）"""
-    chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+    """生成随机验证码文本（纯大写或纯小写+数字，排除易混淆字符，输入时大小写均可）"""
+    # 随机选择大写或小写模式，图片只显示一种，更容易辨认
+    if random.random() < 0.5:
+        chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    else:
+        chars = "abcdefghjkmnpqrstuvwxyz23456789"
     return "".join(random.choices(chars, k=length))
 
 
