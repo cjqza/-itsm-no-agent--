@@ -359,46 +359,74 @@
       </template>
     </el-dialog>
 
-    <!-- 新增管理员对话框 -->
+    <!-- 设置管理员对话框 -->
     <el-dialog
       v-model="adminDialogVisible"
-      title="新增管理员"
-      width="480px"
+      title="设置管理员"
+      width="500px"
       :close-on-click-modal="false"
       @closed="resetAdminForm"
     >
-      <el-form
-        ref="adminFormRef"
-        :model="adminForm"
-        :rules="adminFormRules"
-        label-width="80px"
-        label-position="right"
-      >
-        <el-form-item label="姓名" prop="name">
-          <el-input v-model="adminForm.name" placeholder="请输入姓名" />
-        </el-form-item>
-        <el-form-item label="手机号" prop="phone">
-          <el-input v-model="adminForm.phone" placeholder="请输入手机号" />
-        </el-form-item>
-        <el-form-item label="密码" prop="password">
-          <el-input v-model="adminForm.password" type="password" show-password placeholder="请输入密码" />
-        </el-form-item>
-        <el-form-item label="邮箱">
-          <el-input v-model="adminForm.email" placeholder="请输入邮箱（可选）" />
-        </el-form-item>
-        <el-form-item label="部门">
-          <el-input v-model="adminForm.department" placeholder="请输入部门（可选）" />
-        </el-form-item>
-        <el-form-item label="角色" prop="role">
-          <el-select v-model="adminForm.role" placeholder="请选择角色" style="width: 100%">
+      <div style="margin-bottom: 16px;">
+        <div style="font-size: 13px; color: #666; margin-bottom: 8px;">
+          输入用户的账号或姓名进行匹配，确认后设置为管理员。
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <el-input
+            v-model="adminSearchKeyword"
+            placeholder="输入账号或姓名搜索"
+            clearable
+            @input="searchUserForAdmin"
+            style="flex: 1"
+          >
+            <template #prefix><el-icon><Search /></el-icon></template>
+          </el-input>
+          <el-select v-model="adminForm.role" placeholder="角色" style="width: 140px">
             <el-option label="管理员" value="admin" />
             <el-option label="超级管理员" value="super_admin" />
           </el-select>
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
+
+      <div v-if="adminSearchLoading" style="text-align: center; padding: 20px;">
+        <el-icon class="is-loading"><Loading /></el-icon> 搜索中...
+      </div>
+
+      <el-table
+        v-else-if="adminSearchResults.length > 0"
+        :data="adminSearchResults"
+        max-height="250"
+        highlight-current-row
+        @current-change="handleAdminUserSelect"
+        style="width: 100%"
+      >
+        <el-table-column prop="login_id" label="账号" width="100" />
+        <el-table-column prop="name" label="姓名" width="100" />
+        <el-table-column prop="phone" label="手机号" width="130" />
+        <el-table-column prop="role" label="当前角色" width="80">
+          <template #default="{ row }">
+            <el-tag size="small">{{ roleText(row.role) }}</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div v-else-if="adminSearchKeyword && !adminSearchLoading" style="text-align: center; padding: 20px; color: #999;">
+        未找到匹配用户
+      </div>
+
+      <div v-if="selectedAdminUser" style="margin-top: 12px; padding: 10px; background: #f0f9ff; border-radius: 6px; font-size: 13px;">
+        已选择：<strong>{{ selectedAdminUser.name }}</strong>（{{ selectedAdminUser.login_id }}）
+        → 将设置为 <el-tag size="small" type="danger">{{ adminForm.role === 'super_admin' ? '超级管理员' : '管理员' }}</el-tag>
+      </div>
+
       <template #footer>
         <el-button @click="adminDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleAdminSubmit">创建</el-button>
+        <el-button
+          type="primary"
+          :loading="submitting"
+          :disabled="!selectedAdminUser"
+          @click="handleSetAdmin"
+        >确认设置</el-button>
       </template>
     </el-dialog>
 
@@ -652,22 +680,34 @@ async function handleDowngrade(row) {
   }
 }
 
-// ===== 新增管理员 =====
+// ===== 设置管理员 =====
 const adminDialogVisible = ref(false)
-const adminFormRef = ref(null)
-const adminForm = reactive({
-  name: '',
-  phone: '',
-  password: '',
-  email: '',
-  department: '',
-  role: 'admin',
-})
-const adminFormRules = {
-  name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
-  phone: [{ required: true, message: '请输入手机号', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
-  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
+const adminSearchKeyword = ref('')
+const adminSearchResults = ref([])
+const adminSearchLoading = ref(false)
+const selectedAdminUser = ref(null)
+const adminForm = reactive({ role: 'admin' })
+
+async function searchUserForAdmin() {
+  if (!adminSearchKeyword.value.trim()) {
+    adminSearchResults.value = []
+    return
+  }
+  adminSearchLoading.value = true
+  try {
+    const res = await adminApi.getUsers({ keyword: adminSearchKeyword.value.trim(), page_size: 20 })
+    // 过滤掉已经是管理员/超级管理员的用户
+    adminSearchResults.value = (res?.items || []).filter(u => u.role !== 'admin' && u.role !== 'super_admin')
+  } catch (e) {
+    ElMessage.error('搜索失败')
+    adminSearchResults.value = []
+  } finally {
+    adminSearchLoading.value = false
+  }
+}
+
+function handleAdminUserSelect(row) {
+  selectedAdminUser.value = row
 }
 
 // ===== 编辑管理员 =====
@@ -988,44 +1028,44 @@ async function handleUnlock(row) {
 // ===== 管理员操作方法 =====
 
 function openAdminDialog() {
-  adminForm.name = ''
-  adminForm.phone = ''
-  adminForm.password = ''
-  adminForm.email = ''
-  adminForm.department = ''
+  adminSearchKeyword.value = ''
+  adminSearchResults.value = []
+  selectedAdminUser.value = null
   adminForm.role = 'admin'
   adminDialogVisible.value = true
 }
 
 function resetAdminForm() {
-  adminFormRef.value?.resetFields()
-  adminForm.name = ''
-  adminForm.phone = ''
-  adminForm.password = ''
-  adminForm.email = ''
-  adminForm.department = ''
+  adminSearchKeyword.value = ''
+  adminSearchResults.value = []
+  selectedAdminUser.value = null
   adminForm.role = 'admin'
 }
 
-async function handleAdminSubmit() {
-  if (adminFormRef.value) {
-    try {
-      await adminFormRef.value.validate()
-    } catch {
-      return
-    }
+async function handleSetAdmin() {
+  if (!selectedAdminUser.value) {
+    ElMessage.warning('请先选择用户')
+    return
+  }
+  const roleName = adminForm.role === 'super_admin' ? '超级管理员' : '管理员'
+  try {
+    await ElMessageBox.confirm(
+      `确定要将「${selectedAdminUser.value.name}」（${selectedAdminUser.value.login_id}）设置为${roleName}吗？`,
+      '操作确认',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch {
+    return
   }
   submitting.value = true
   try {
     await adminApi.createAdmin({
-      name: adminForm.name,
-      phone: adminForm.phone,
-      password: adminForm.password,
-      email: adminForm.email || null,
-      department: adminForm.department || null,
+      name: selectedAdminUser.value.name,
+      phone: selectedAdminUser.value.phone,
+      login_id: selectedAdminUser.value.login_id,
       role: adminForm.role,
     })
-    ElMessage.success('管理员创建成功')
+    ElMessage.success(`已将 ${selectedAdminUser.value.name} 设置为${roleName}`)
     adminDialogVisible.value = false
     await loadUsers()
   } catch (e) {

@@ -39,8 +39,9 @@ class UserStatusUpdate(BaseModel):
 
 class AdminCreate(BaseModel):
     name: str
-    phone: str
-    password: str
+    phone: Optional[str] = None
+    login_id: Optional[str] = None  # 如果提供，表示从已有用户升级
+    password: Optional[str] = None  # 从已有用户升级时不需要
     email: Optional[str] = None
     department: Optional[str] = None
     role: Optional[str] = "admin"  # "admin" 或 "super_admin"
@@ -242,7 +243,11 @@ async def create_admin(
     current_user: User = Depends(require_permission("admin_access")),
     db: AsyncSession = Depends(get_db),
 ):
-    """新增管理员（仅超级管理员可调用）"""
+    """设置管理员（仅超级管理员可调用）
+
+    - 提供 login_id：从已有用户升级为管理员（无需密码）
+    - 不提供 login_id：创建新管理员账号（需要密码和手机号）
+    """
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="只有超级管理员可以创建管理员账号")
 
@@ -250,13 +255,67 @@ async def create_admin(
     if data.role not in ("admin", "super_admin"):
         raise HTTPException(status_code=400, detail="role 必须为 admin 或 super_admin")
 
+    target_role = UserRole.SUPER_ADMIN if data.role == "super_admin" else UserRole.ADMIN
+
+    # 从已有用户升级
+    if data.login_id:
+        result = await db.execute(select(User).where(User.login_id == data.login_id))
+        admin_user = result.scalar_one_or_none()
+        if not admin_user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        if admin_user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
+            raise HTTPException(status_code=400, detail="该用户已是管理员")
+        if admin_user.name != data.name:
+            raise HTTPException(status_code=400, detail="账号与姓名不匹配")
+
+        # 升级为管理员
+        admin_user.role = target_role
+        admin_user.updated_at = datetime.now(timezone.utc)
+
+        # 确保有权限记录并授予 admin_access
+        perm_result = await db.execute(select(Permission).where(Permission.user_id == admin_user.id))
+        perm = perm_result.scalar_one_or_none()
+        if perm:
+            perm.admin_access = True
+            perm.itsm_access = True
+            perm.ops_access = True
+            perm.admin_approved_by = current_user.id
+        else:
+            db.add(Permission(
+                user_id=admin_user.id,
+                itsm_access=True, ops_access=True, admin_access=True,
+                admin_approved_by=current_user.id,
+            ))
+
+        db.add(AuditLog(
+            operator_id=current_user.id,
+            action="upgrade_admin",
+            target_type="admin",
+            target_id=admin_user.id,
+            detail=f"升级为{target_role.value}: {admin_user.name}",
+        ))
+        await db.commit()
+
+        return {
+            "success": True,
+            "user": {
+                "id": admin_user.id,
+                "name": admin_user.name,
+                "login_id": admin_user.login_id,
+                "role": admin_user.role.value,
+            },
+        }
+
+    # 创建新管理员（需要密码和手机号）
+    if not data.phone or not data.password:
+        raise HTTPException(status_code=400, detail="创建新管理员需要手机号和密码")
+
     # 检查手机号唯一性
     existing = await db.execute(select(User).where(User.phone == data.phone))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="该手机号已被注册")
 
     login_id = await generate_next_login_id(db)
-    target_role = UserRole.SUPER_ADMIN if data.role == "super_admin" else UserRole.ADMIN
 
     admin_user = User(
         name=data.name,
