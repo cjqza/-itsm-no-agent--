@@ -393,6 +393,10 @@ async function handleResolve() {
   classForm.cause_id = ticket.value.cause_id || null
   classForm.solution_id = ticket.value.solution_id || null
   classForm.solution_text = ticket.value.solution_text || ''
+  // 如果有预填的分类，加载对应的业务模块
+  if (classForm.category_id) {
+    await loadBusinessModules()
+  }
   showClassification.value = true
 }
 
