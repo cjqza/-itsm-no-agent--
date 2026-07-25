@@ -33,17 +33,6 @@
           </div>
         </el-card>
 
-        <!-- 问题描述 -->
-        <el-card class="section" style="margin-top:16px">
-          <template #header><span>问题描述</span></template>
-          <div class="description">{{ ticket.description || '无描述' }}</div>
-          <div class="meta">
-            <span>提交人：{{ ticket.creator_name }}</span>
-            <span>优先级：<el-tag :type="priorityType(ticket.priority)" size="small">{{ ticket.priority }}</el-tag></span>
-            <span>分类：{{ ticket.category_name || '未分类' }}</span>
-          </div>
-        </el-card>
-
         <!-- SLA计时 -->
         <el-card class="section" style="margin-top:16px">
           <template #header>
@@ -53,12 +42,11 @@
             </div>
           </template>
           <div class="sla-bar">
-            <el-progress :percentage="slaPercent" :color="slaColor(ticket.sla_status)" :stroke-width="20" />
+            <el-progress :percentage="slaPercent" :color="slaColorByPercent(slaPercent)" :stroke-width="20" />
             <div class="sla-info">
               <span>SLA时效：{{ ticket.sla_hours || '-' }}小时</span>
               <span>已消耗：{{ slaPercent }}%</span>
               <span>剩余：{{ slaRemaining }}</span>
-              <span>状态：<el-tag :type="slaTagType(ticket.sla_status)" size="small">{{ slaText(ticket.sla_status) }}</el-tag></span>
             </div>
           </div>
         </el-card>
@@ -68,13 +56,24 @@
           <template #header><span>工单分类</span></template>
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item label="负责人">{{ ticket.assignee_name || '未分配' }}</el-descriptions-item>
+            <el-descriptions-item label="优先级"><el-tag :type="priorityType(ticket.priority)" size="small">{{ ticket.priority }}</el-tag></el-descriptions-item>
             <el-descriptions-item label="管理单元">{{ ticket.category_name || '未填写' }}</el-descriptions-item>
             <el-descriptions-item label="业务模块">{{ ticket.business_module_name || '未填写' }}</el-descriptions-item>
             <el-descriptions-item label="性质">{{ ticket.property_name || '未填写' }}</el-descriptions-item>
             <el-descriptions-item label="症状">{{ ticket.symptom_name || '未填写' }}</el-descriptions-item>
             <el-descriptions-item label="原因">{{ ticket.cause_name || '未填写' }}</el-descriptions-item>
-            <el-descriptions-item label="解决方法" :span="2">{{ ticket.solution_name || '未填写' }}</el-descriptions-item>
+            <el-descriptions-item label="解决方法" :span="2">{{ ticket.solution_text || ticket.solution_name || '未填写' }}</el-descriptions-item>
           </el-descriptions>
+        </el-card>
+
+        <!-- 问题描述 -->
+        <el-card class="section" style="margin-top:16px">
+          <template #header><span>问题描述</span></template>
+          <div class="description">{{ ticket.description || '无描述' }}</div>
+          <div class="meta">
+            <span>提交人：{{ ticket.creator_name }}</span>
+            <span>创建时间：{{ formatTime(ticket.created_at) }}</span>
+          </div>
         </el-card>
       </el-col>
 
@@ -192,6 +191,14 @@
         解决工单前，请填写完整的分类信息。所有字段均为必填。
       </div>
       <el-form label-width="100px" label-position="right">
+        <el-form-item label="优先级">
+          <el-select v-model="classForm.priority" style="width:100%">
+            <el-option label="P1 - 紧急" value="P1" />
+            <el-option label="P2 - 高" value="P2" />
+            <el-option label="P3 - 中" value="P3" />
+            <el-option label="P4 - 低" value="P4" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="管理单元" required>
           <el-select v-model="classForm.category_id" placeholder="请选择管理单元" style="width:100%" @change="onCategoryChange">
             <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
@@ -281,6 +288,7 @@ const classForm = reactive({
   cause_id: null,
   solution_id: null,
   solution_text: '',
+  priority: 'P2',
 })
 const categories = ref([])
 const businessModules = ref([])
@@ -370,6 +378,14 @@ const slaRemaining = computed(() => {
   return `${hours}h ${minutes}m`
 })
 
+// SLA颜色：基于百分比（0-50绿，50-80黄，80-100红，100+黑）
+function slaColorByPercent(percent) {
+  if (percent >= 100) return '#333'
+  if (percent >= 80) return '#f56c6c'
+  if (percent >= 50) return '#e6a23c'
+  return '#67c23a'
+}
+
 async function handleAccept() {
   try {
     await ticketApi.accept(ticketId)
@@ -409,6 +425,7 @@ async function openClassificationDialog() {
   classForm.cause_id = ticket.value.cause_id || null
   classForm.solution_id = ticket.value.solution_id || null
   classForm.solution_text = ticket.value.solution_text || ''
+  classForm.priority = ticket.value.priority || 'P2'
   // 如果有预填的分类，加载对应的业务模块
   if (classForm.category_id) {
     await loadBusinessModules()
@@ -503,6 +520,7 @@ async function handleClassificationSubmit() {
       cause_id: classForm.cause_id,
       solution_id: classForm.solution_id || null,
       solution_text: classForm.solution_text.trim() || null,
+      priority: classForm.priority,
     })
 
     if (!classifyOnly.value) {
