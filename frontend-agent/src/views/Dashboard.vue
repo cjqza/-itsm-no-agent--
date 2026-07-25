@@ -41,29 +41,51 @@
             </el-card>
           </el-col>
 
-          <!-- 右上：待处理工单池（已受理未处理） -->
+          <!-- 右上：待处理工单池（分 Tab） -->
           <el-col :span="12">
             <el-card class="panel">
               <template #header>
                 <div class="panel-header">
-                  <span>📥 待处理工单池 <el-tag type="warning" size="small">{{ acceptedTickets.length }}</el-tag></span>
+                  <span>📥 待处理工单池</span>
+                  <el-tabs v-model="acceptedTab" class="mini-tabs">
+                    <el-tab-pane :label="`我的 (${myAcceptedTickets.length})`" name="mine" />
+                    <el-tab-pane :label="`全部 (${otherAcceptedTickets.length})`" name="all" />
+                  </el-tabs>
                 </div>
               </template>
               <div class="ticket-list">
-                <div v-for="t in acceptedTickets" :key="t.id" class="ticket-item" @click="goToDetail(t)">
-                  <div class="ticket-left">
-                    <div class="sla-bar" :style="{ background: slaColor(t.sla_status) }"></div>
-                  </div>
-                  <div class="ticket-body">
-                    <div class="ticket-title">{{ t.ticket_no }} - {{ t.title }}</div>
-                    <div class="ticket-meta">
-                      <span>负责人: {{ t.assignee_name || '未分配' }}</span>
-                      <span>{{ formatTime(t.created_at) }}</span>
+                <template v-if="acceptedTab === 'mine'">
+                  <div v-for="t in myAcceptedTickets" :key="t.id" class="ticket-item" @click="goToDetail(t)">
+                    <div class="ticket-left">
+                      <div class="sla-bar" :style="{ background: slaColor(t.sla_status) }"></div>
                     </div>
+                    <div class="ticket-body">
+                      <div class="ticket-title">{{ t.ticket_no }} - {{ t.title }}</div>
+                      <div class="ticket-meta">
+                        <span>{{ t.creator_name }}</span>
+                        <span>{{ formatTime(t.created_at) }}</span>
+                      </div>
+                    </div>
+                    <el-tag :type="statusTagType(t.status)" size="small">{{ statusText(t.status) }}</el-tag>
                   </div>
-                  <el-tag :type="statusTagType(t.status)" size="small">{{ statusText(t.status) }}</el-tag>
-                </div>
-                <el-empty v-if="acceptedTickets.length === 0" description="暂无待处理工单" />
+                  <el-empty v-if="myAcceptedTickets.length === 0" description="暂无我的待处理工单" />
+                </template>
+                <template v-else>
+                  <div v-for="t in otherAcceptedTickets" :key="t.id" class="ticket-item" @click="goToDetail(t)">
+                    <div class="ticket-left">
+                      <div class="sla-bar" :style="{ background: slaColor(t.sla_status) }"></div>
+                    </div>
+                    <div class="ticket-body">
+                      <div class="ticket-title">{{ t.ticket_no }} - {{ t.title }}</div>
+                      <div class="ticket-meta">
+                        <span>负责人: {{ t.assignee_name || '未分配' }}</span>
+                        <span>{{ formatTime(t.created_at) }}</span>
+                      </div>
+                    </div>
+                    <el-tag :type="statusTagType(t.status)" size="small">{{ statusText(t.status) }}</el-tag>
+                  </div>
+                  <el-empty v-if="otherAcceptedTickets.length === 0" description="暂无其他人的待处理工单" />
+                </template>
               </div>
             </el-card>
           </el-col>
@@ -159,7 +181,13 @@ async function loadData() {
 const draftTickets = computed(() => allTickets.value.filter(t => t.status === 'pending'))
 
 // 待处理工单池：已受理（accepted）
-const acceptedTickets = computed(() => allTickets.value.filter(t => t.status === 'accepted'))
+const acceptedTab = ref('mine')
+const myAcceptedTickets = computed(() =>
+  allTickets.value.filter(t => t.status === 'accepted' && t.assignee_id === store.user?.id)
+)
+const otherAcceptedTickets = computed(() =>
+  allTickets.value.filter(t => t.status === 'accepted' && t.assignee_id !== store.user?.id)
+)
 
 // 我的待办：我处理中（processing，指派给我）
 const myProcessingTickets = computed(() =>
