@@ -275,15 +275,20 @@ class TicketService:
         **kwargs,
     ) -> Ticket:
         """更新工单信息"""
+        from app.models.category import Category
+
         result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
         ticket = result.scalar_one_or_none()
         if not ticket:
             raise ValueError("工单不存在")
 
+        category_changed = False
         for key, value in kwargs.items():
             if value is not None and hasattr(ticket, key):
                 old_val = getattr(ticket, key)
                 setattr(ticket, key, value)
+                if key == "category_id" and old_val != value:
+                    category_changed = True
                 log = TicketLog(
                     ticket_id=ticket_id,
                     operator_id=operator_id,
@@ -291,6 +296,27 @@ class TicketService:
                     old_value=str(old_val),
                     new_value=str(value),
                     content=f"更新 {key}",
+                )
+                db.add(log)
+
+        # 管理单元变更时，同步更新 SLA 时间
+        if category_changed and ticket.category_id:
+            cat_result = await db.execute(
+                select(Category).where(Category.id == ticket.category_id)
+            )
+            category = cat_result.scalar_one_or_none()
+            if category and category.sla_hours:
+                old_sla = ticket.sla_hours
+                ticket.sla_hours = category.sla_hours
+                # 重新计算 SLA 截止时间（从创建时间起算）
+                ticket.sla_deadline = ticket.created_at + timedelta(hours=category.sla_hours)
+                log = TicketLog(
+                    ticket_id=ticket_id,
+                    operator_id=operator_id,
+                    action="update",
+                    old_value=str(old_sla),
+                    new_value=str(category.sla_hours),
+                    content="SLA时间随管理单元变更",
                 )
                 db.add(log)
 
