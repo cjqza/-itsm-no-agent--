@@ -11,6 +11,7 @@
         <div class="actions">
           <el-button v-if="ticket.status === 'pending'" type="primary" @click="handleAccept">接单</el-button>
           <el-button v-if="ticket.status === 'accepted'" type="primary" @click="handleStatus('processing')">开始处理</el-button>
+          <el-button v-if="ticket.status === 'processing'" type="primary" @click="handleClassify">性质</el-button>
           <el-button v-if="ticket.status === 'processing'" type="success" @click="handleResolve">解决</el-button>
           <el-button @click="showRemark = true">修改标注</el-button>
           <el-button v-if="!ticket.is_sla_paused" @click="handlePauseSla">暂停计时</el-button>
@@ -82,6 +83,7 @@
         <el-card class="section">
           <template #header><span>操作</span></template>
           <div class="op-buttons">
+            <el-button v-if="ticket.status === 'processing'" type="primary" @click="handleClassify" style="width:100%">性质</el-button>
             <el-button v-if="ticket.status === 'processing'" type="success" @click="handleResolve" style="width:100%">解决</el-button>
             <el-button type="warning" @click="showTransfer = true" style="width:100%">转派</el-button>
             <el-button type="info" disabled style="width:100%">派至现场 (开发中)</el-button>
@@ -184,7 +186,7 @@
     </el-dialog>
 
     <!-- 性质修改对话框 -->
-    <el-dialog v-model="showClassification" title="性质修改 - 解决工单" width="600px" :close-on-click-modal="false">
+    <el-dialog v-model="showClassification" :title="classifyOnly ? '性质修改' : '性质修改 - 解决工单'" width="600px" :close-on-click-modal="false">
       <div style="margin-bottom: 12px; color: #666; font-size: 13px;">
         解决工单前，请填写完整的分类信息。所有字段均为必填。
       </div>
@@ -223,7 +225,7 @@
       </el-form>
       <template #footer>
         <el-button @click="showClassification = false">取消</el-button>
-        <el-button type="success" :loading="operating" @click="handleClassificationSubmit">确认解决</el-button>
+        <el-button type="success" :loading="operating" @click="handleClassificationSubmit">{{ classifyOnly ? '保存' : '确认解决' }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -269,6 +271,7 @@ const transferReason = ref('')
 
 // 性质修改对话框
 const showClassification = ref(false)
+const classifyOnly = ref(false)  // true=仅修改分类，false=修改分类并解决
 const classForm = reactive({
   category_id: null,
   business_module_id: null,
@@ -382,7 +385,19 @@ async function handleStatus(status) {
   } catch (e) { ElMessage.error('状态更新失败') }
 }
 
+async function handleClassify() {
+  // 仅修改分类，不解决工单
+  classifyOnly.value = true
+  await openClassificationDialog()
+}
+
 async function handleResolve() {
+  // 修改分类并解决工单
+  classifyOnly.value = false
+  await openClassificationDialog()
+}
+
+async function openClassificationDialog() {
   // 打开性质修改对话框
   await loadClassificationData()
   // 预填当前工单的分类信息
@@ -452,17 +467,19 @@ async function loadSymptomsCausesSolutions() {
 }
 
 async function handleClassificationSubmit() {
-  // 校验必填
-  if (!classForm.category_id) { ElMessage.warning('请选择管理单元'); return }
-  if (!classForm.business_module_id) { ElMessage.warning('请选择业务模块'); return }
-  if (!classForm.property_id) { ElMessage.warning('请选择性质'); return }
-  if (!classForm.symptom_id) { ElMessage.warning('请选择症状'); return }
-  if (!classForm.cause_id) { ElMessage.warning('请选择原因'); return }
-  if (!classForm.solution_id && !classForm.solution_text.trim()) { ElMessage.warning('请选择或填写解决方法'); return }
+  // 校验必填（仅解决时需要全部填写，仅修改时允许部分填写）
+  if (!classifyOnly.value) {
+    if (!classForm.category_id) { ElMessage.warning('请选择管理单元'); return }
+    if (!classForm.business_module_id) { ElMessage.warning('请选择业务模块'); return }
+    if (!classForm.property_id) { ElMessage.warning('请选择性质'); return }
+    if (!classForm.symptom_id) { ElMessage.warning('请选择症状'); return }
+    if (!classForm.cause_id) { ElMessage.warning('请选择原因'); return }
+    if (!classForm.solution_id && !classForm.solution_text.trim()) { ElMessage.warning('请选择或填写解决方法'); return }
+  }
 
   operating.value = true
   try {
-    // 先更新分类信息
+    // 更新分类信息
     await ticketApi.update(ticketId, {
       category_id: classForm.category_id,
       business_module_id: classForm.business_module_id,
@@ -472,9 +489,14 @@ async function handleClassificationSubmit() {
       solution_id: classForm.solution_id || null,
       solution_text: classForm.solution_text.trim() || null,
     })
-    // 再解决工单
-    await ticketApi.resolve(ticketId)
-    ElMessage.success('已标记为待评价')
+
+    if (!classifyOnly.value) {
+      // 解决工单
+      await ticketApi.resolve(ticketId)
+      ElMessage.success('已标记为待评价')
+    } else {
+      ElMessage.success('分类信息已更新')
+    }
     showClassification.value = false
     await loadAll()
   } catch (e) {
