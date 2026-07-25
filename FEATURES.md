@@ -153,6 +153,10 @@
 - [x] 今日工单数、待处理数、处理中数、已解决数
 - [x] 工单趋势图表（ECharts）
 - [x] 分类分布饼图
+- [x] 状态分布饼图（专用接口）
+- [x] 管理单元柱状图（含平均处理时长 tooltip）
+- [x] 评分分布柱状图
+- [x] 时间筛选支持「全部」选项（days 参数可选）
 - [x] SLA 达标率
 
 ### 4.2 数据分析（Analysis）
@@ -179,7 +183,7 @@
 
 ---
 
-## 五、后端 API（67 个端点）
+## 五、后端 API（71 个端点）
 
 ### 5.1 认证（auth.py + captcha.py — 5 个）
 | 方法 | 路径 | 说明 |
@@ -252,16 +256,20 @@
 | CRUD | /api/admin/causes/ | 原因 |
 | CRUD | /api/admin/solutions/ | 解决方法 |
 
-### 5.5 OPS 统计（ops.py — 7 个）
+### 5.5 OPS 统计（ops.py — 11 个）
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | /api/ops/statistics | 综合统计 |
+| GET | /api/ops/statistics/overview | 总览统计（days 可选） |
+| GET | /api/ops/statistics/by-category | 按管理单元统计（days 可选） |
+| GET | /api/ops/statistics/by-agent | 按客服统计（days 可选） |
+| GET | /api/ops/statistics/ratings | 评分统计（days 可选） |
+| GET | /api/ops/statistics/sla-compliance | SLA 达标率（days 可选） |
+| GET | /api/ops/statistics/trend | 趋势分析（days 可选） |
+| GET | /api/ops/tickets | OPS 工单列表（days 可选） |
+| GET | /api/ops/status-distribution | 状态分布（days 可选） |
+| GET | /api/ops/category-stats | 管理单元统计（含平均处理时长，days 可选） |
+| GET | /api/ops/rating-distribution | 评分分布（days 可选） |
 | GET | /api/ops/export | 导出报表 |
-| GET | /api/ops/trend | 趋势分析 |
-| GET | /api/ops/category-distribution | 分类分布 |
-| GET | /api/ops/agent-performance | 客服绩效 |
-| GET | /api/ops/sla-stats | SLA 统计 |
-| GET | /api/ops/ticket-history | 历史工单查询 |
 
 ### 5.6 文件上传（upload.py — 1 个）
 | 方法 | 路径 | 说明 |

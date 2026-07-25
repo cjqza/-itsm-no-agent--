@@ -2,6 +2,13 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-25] OPS 统计系统增强：新增图表接口、全部时间筛选、权限修复
+- **变更**：(1) 后端新增 4 个 OPS 专用接口：`/ops/tickets`（工单列表）、`/ops/status-distribution`（状态分布）、`/ops/category-stats`（管理单元统计含平均处理时长）、`/ops/rating-distribution`（评分分布）。(2) 所有 OPS 统计接口的 `days` 参数从必填（默认 30 天）改为可选（None = 全部历史数据）。(3) 前端 Overview.vue 增加「全部」时间筛选选项，改用新专用接口渲染状态分布饼图、管理单元柱状图（含平均处理时长 tooltip）、评分分布柱状图。(4) TicketHistory.vue 权限修复：`loadCategories` 改用公开的 `/itsm/categories` 接口，`loadTickets` 改用 OPS 专用工单列表接口。(5) `frontend-ops/src/api/index.js` 新增 4 个 API 方法。4 个文件变更，+203 / -38。
+- **原因**：OPS 统计缺乏专用图表接口，前端依赖通用接口拼装数据效率低；`days` 硬编码 30 天无法查看全部历史数据；TicketHistory 的分类加载和工单列表使用了需要 itsm_access 权限的接口，OPS 用户无法正常访问。
+- **影响**：`backend/app/api/ops.py`（新增 4 个端点 + days 参数可选化）；`frontend-ops/src/views/Overview.vue`（全部筛选 + 新图表接口）；`frontend-ops/src/views/TicketHistory.vue`（权限修复）；`frontend-ops/src/api/index.js`（新增 API 方法）。OPS 端点总数从 7 个增至 11 个。
+- **提交**：`a6e8049`
+- **测试**：73/73 全部通过。
+
 ## [2026-07-25] 我的工单页面 - 已评价工单弹出详情对话框
 - **变更**：MyTickets.vue 改造工单操作按钮与行点击逻辑，按工单状态智能分发。(1) `resolved_pending_review`（待评价）→「去评价」按钮，跳转 `/chat-rooms?ticket_id=xxx`。(2) `resolved`（已评价）→「查看」按钮，弹出详情对话框，展示工单号、创建时间、处理人、四维评分（服务态度/解决方法/解决时间/总体评价）、反馈留言。(3) 其他状态（pending/accepted/processing）→「查看」按钮，跳转聊天室。(4) 行点击也按状态智能分发，体验与按钮一致。(5) 详情数据通过 `ticketApi.get(row.id)` 获取。
 - **原因**：已评价工单之前点击仍跳转聊天室，用户无法快速回顾评分与反馈；弹出详情对话框信息更集中、操作更轻量。
