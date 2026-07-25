@@ -398,7 +398,7 @@ async function handleResolve() {
 
 async function loadClassificationData() {
   try {
-    const [cats, props, syms, causes, sols] = await Promise.all([
+    const [cats, props, syms, causeList, solList] = await Promise.all([
       classificationApi.getCategories(),
       classificationApi.getProperties(),
       classificationApi.getSymptoms(),
@@ -408,8 +408,8 @@ async function loadClassificationData() {
     categories.value = cats || []
     properties.value = props || []
     symptoms.value = syms || []
-    causes.value = causes || []
-    solutions.value = sols || []
+    causes.value = causeList || []
+    solutions.value = solList || []
   } catch (e) { ElMessage.error('加载分类数据失败') }
 }
 
