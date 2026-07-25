@@ -120,6 +120,36 @@
           </el-timeline>
         </el-card>
 
+        <!-- 评价详情（已评价工单） -->
+        <el-card v-if="ticket.status === 'resolved' && ticket.rating_overall" class="section" style="margin-top:16px">
+          <template #header><span>📋 用户评价</span></template>
+          <div class="rating-grid">
+            <div class="rating-item">
+              <span class="rating-label">服务态度</span>
+              <el-rate :model-value="ticket.rating_attitude" disabled />
+              <span class="rating-score">{{ ticket.rating_attitude }}/5</span>
+            </div>
+            <div class="rating-item">
+              <span class="rating-label">解决方法</span>
+              <el-rate :model-value="ticket.rating_solution" disabled />
+              <span class="rating-score">{{ ticket.rating_solution }}/5</span>
+            </div>
+            <div class="rating-item">
+              <span class="rating-label">解决时间</span>
+              <el-rate :model-value="ticket.rating_time" disabled />
+              <span class="rating-score">{{ ticket.rating_time }}/5</span>
+            </div>
+            <div class="rating-item">
+              <span class="rating-label">总体评价</span>
+              <el-rate :model-value="ticket.rating_overall" disabled size="large" />
+              <span class="rating-score" style="font-weight:600;color:#1e293b">{{ ticket.rating_overall }}/5</span>
+            </div>
+          </div>
+          <div v-if="ticket.rating_comment" class="rating-comment">
+            <strong>用户反馈：</strong>{{ ticket.rating_comment }}
+          </div>
+        </el-card>
+
         <!-- 聊天区域 -->
         <el-card class="section chat-card" style="margin-top:16px" v-if="chatRoom">
           <template #header><span>对话</span></template>
@@ -448,4 +478,34 @@ function scrollToBottom() { nextTick(() => { if (chatRef.value) chatRef.value.sc
 .bubble.mine .text { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; border-bottom-right-radius: 4px; }
 .bubble.other .text { background: #f1f5f9; color: #334155; border-bottom-left-radius: 4px; }
 .chat-input { display: flex; gap: 8px; padding: 14px; border-top: 1px solid #f0f0f0; background: #fafbfc; }
+
+/* 评价详情 */
+.rating-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.rating-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rating-label {
+  min-width: 70px;
+  font-size: 13px;
+  color: #475569;
+}
+.rating-score {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-left: 4px;
+}
+.rating-comment {
+  margin-top: 12px;
+  padding: 10px;
+  background: #f8fafc;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #475569;
+}
 </style>

@@ -34,8 +34,11 @@ class TicketAssign(BaseModel):
 
 
 class TicketRate(BaseModel):
-    rating: int = Field(..., ge=1, le=5)
-    rating_comment: Optional[str] = None
+    rating_attitude: int = Field(..., ge=0, le=5, description="服务态度 0-5")
+    rating_solution: int = Field(..., ge=0, le=5, description="解决方法 0-5")
+    rating_time: int = Field(..., ge=0, le=5, description="解决时间 0-5")
+    rating_overall: int = Field(..., ge=0, le=5, description="总体评价 0-5")
+    rating_comment: Optional[str] = Field(None, max_length=500)
 
 
 class TicketRemark(BaseModel):

@@ -292,9 +292,6 @@ async def rate_ticket(
     db: AsyncSession = Depends(get_db),
 ):
     """评价工单（仅工单创建者可评价）"""
-    if data.rating < 1 or data.rating > 5:
-        raise HTTPException(status_code=400, detail="评分必须在1-5之间")
-
     # 先校验工单归属
     result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
     ticket_obj = result.scalar_one_or_none()
@@ -306,11 +303,21 @@ async def rate_ticket(
     ticket = await ticket_service.rate_ticket(
         db=db,
         ticket_id=ticket_id,
-        rating=data.rating,
+        rating_attitude=data.rating_attitude,
+        rating_solution=data.rating_solution,
+        rating_time=data.rating_time,
+        rating_overall=data.rating_overall,
         comment=data.rating_comment,
     )
     await db.commit()
-    return {"success": True, "rating": ticket.rating}
+    return {
+        "success": True,
+        "rating": ticket.rating,
+        "rating_attitude": ticket.rating_attitude,
+        "rating_solution": ticket.rating_solution,
+        "rating_time": ticket.rating_time,
+        "rating_overall": ticket.rating_overall,
+    }
 
 
 @router.put("/tickets/{ticket_id}/remark")

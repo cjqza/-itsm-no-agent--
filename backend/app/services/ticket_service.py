@@ -332,10 +332,13 @@ class TicketService:
         self,
         db: AsyncSession,
         ticket_id: int,
-        rating: int,
+        rating_attitude: int,
+        rating_solution: int,
+        rating_time: int,
+        rating_overall: int,
         comment: Optional[str] = None,
     ) -> Ticket:
-        """评价工单"""
+        """评价工单（四维评分）"""
         result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
         ticket = result.scalar_one_or_none()
         if not ticket:
@@ -345,7 +348,11 @@ class TicketService:
         if ticket.status != TicketStatus.RESOLVED_PENDING_REVIEW:
             raise ValueError("只有待评价状态的工单可以评价")
 
-        ticket.rating = rating
+        ticket.rating_attitude = rating_attitude
+        ticket.rating_solution = rating_solution
+        ticket.rating_time = rating_time
+        ticket.rating_overall = rating_overall
+        ticket.rating = rating_overall  # 兼容旧字段
         ticket.rating_comment = comment
         ticket.rated_at = datetime.now(timezone.utc)
         ticket.status = TicketStatus.RESOLVED
@@ -445,6 +452,10 @@ class TicketService:
             "sla_status": ticket.sla_status.value if ticket.sla_status else None,
             "is_sla_paused": ticket.is_sla_paused,
             "rating": ticket.rating,
+            "rating_attitude": ticket.rating_attitude,
+            "rating_solution": ticket.rating_solution,
+            "rating_time": ticket.rating_time,
+            "rating_overall": ticket.rating_overall,
             "rating_comment": ticket.rating_comment,
             "remark": ticket.remark,
             "created_at": ticket.created_at.isoformat() if ticket.created_at else None,

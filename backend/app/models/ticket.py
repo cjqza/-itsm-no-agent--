@@ -65,9 +65,13 @@ class Ticket(Base):
     sla_paused_reason = Column(String(512), nullable=True)
     sla_paused_seconds = Column(Integer, default=0)
 
-    # 评价
-    rating = Column(Integer, nullable=True)  # 1-5
-    rating_comment = Column(Text, nullable=True)
+    # 评价（四维评分）
+    rating_attitude = Column(Integer, nullable=True)   # 服务态度 1-5
+    rating_solution = Column(Integer, nullable=True)    # 解决方法 1-5
+    rating_time = Column(Integer, nullable=True)       # 解决时间 1-5
+    rating_overall = Column(Integer, nullable=True)    # 总体评价 1-5
+    rating = Column(Integer, nullable=True)            # 总体评价（兼容旧字段）
+    rating_comment = Column(Text, nullable=True)       # 反馈文字
     rated_at = Column(DateTime, nullable=True)
 
     # 备注
