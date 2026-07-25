@@ -423,6 +423,7 @@ const settingsPermForm = reactive({
 const submitting = ref(false)
 const formRef = ref(null)
 const editingUserId = ref(null)
+const isEditMode = ref(false)
 
 // 是否有权限编辑（admin 或 super_admin）
 const canEditPerms = computed(() => userStore.isAdmin)
