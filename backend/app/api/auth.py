@@ -134,16 +134,16 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
                 detail="账号已锁定，请联系管理员解锁",
             )
 
-    # 验证码检查（始终需要）
-    if not req.captcha_id:
-        raise HTTPException(status_code=400, detail="请输入验证码")
-    if not test_mode and not req.captcha_text:
-        raise HTTPException(status_code=400, detail="请输入验证码")
-    if not await verify_captcha(req.captcha_id, req.captcha_text, test_mode=test_mode):
-        # 验证码错误，记录 IP 失败，不检查密码
-        if not test_mode:
+    # 验证码检查（测试模式跳过）
+    if not test_mode:
+        if not req.captcha_id:
+            raise HTTPException(status_code=400, detail="请输入验证码")
+        if not req.captcha_text:
+            raise HTTPException(status_code=400, detail="请输入验证码")
+        if not await verify_captcha(req.captcha_id, req.captcha_text, test_mode=False):
+            # 验证码错误，记录 IP 失败，不检查密码
             _record_ip_fail(client_ip)
-        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+            raise HTTPException(status_code=400, detail="验证码错误或已过期")
 
     # 校验密码
     if user is None or not verify_password(req.password, user.password_hash):

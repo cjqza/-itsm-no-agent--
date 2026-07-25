@@ -369,7 +369,7 @@ class TicketService:
             sys_msg = ChatMessage(
                 room_id=room.id,
                 sender_id=None,
-                content=f"工单已解决，评价：{'*' * rating}",
+                content=f"工单已解决，评价：{'*' * rating_overall}",
                 msg_type=MessageType.SYSTEM,
             )
             db.add(sys_msg)
@@ -378,7 +378,7 @@ class TicketService:
             ticket_id=ticket_id,
             operator_id=ticket.creator_id,
             action="rated",
-            new_value=str(rating),
+            new_value=str(rating_overall),
             content=comment,
         )
         db.add(log)
