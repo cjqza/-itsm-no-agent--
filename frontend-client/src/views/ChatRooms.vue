@@ -58,13 +58,75 @@
             :current-user-id="userId"
           />
         </div>
+        <!-- Rating form for pending review -->
+        <div v-if="selectedRoom.ticket_status === 'resolved_pending_review'" class="rating-section">
+          <el-card>
+            <template #header>
+              <div class="rating-header">服务评价</div>
+            </template>
+            <div class="rating-grid">
+              <div class="rating-item">
+                <span class="rating-label">服务态度</span>
+                <el-rate v-model="ratingAttitude" :max="5" />
+              </div>
+              <div class="rating-item">
+                <span class="rating-label">解决方法</span>
+                <el-rate v-model="ratingSolution" :max="5" />
+              </div>
+              <div class="rating-item">
+                <span class="rating-label">解决时间</span>
+                <el-rate v-model="ratingTime" :max="5" />
+              </div>
+              <div class="rating-item">
+                <span class="rating-label">总体评价</span>
+                <el-rate v-model="ratingOverall" :max="5" size="large" />
+              </div>
+            </div>
+            <el-input v-model="ratingComment" type="textarea" :rows="3" placeholder="补充反馈（可选）" style="margin: 16px 0" />
+            <el-button type="primary" @click="submitRating" style="width: 100%">提交评价</el-button>
+          </el-card>
+        </div>
+
+        <!-- Already rated display -->
+        <div v-else-if="selectedRoom.ticket_status === 'resolved' && ticketDetail?.rating_overall" class="rating-section">
+          <el-card>
+            <template #header>
+              <div class="rating-header">服务评价</div>
+            </template>
+            <div class="rating-grid">
+              <div class="rating-item">
+                <span class="rating-label">服务态度</span>
+                <el-rate :model-value="ticketDetail.rating_attitude" disabled />
+              </div>
+              <div class="rating-item">
+                <span class="rating-label">解决方法</span>
+                <el-rate :model-value="ticketDetail.rating_solution" disabled />
+              </div>
+              <div class="rating-item">
+                <span class="rating-label">解决时间</span>
+                <el-rate :model-value="ticketDetail.rating_time" disabled />
+              </div>
+              <div class="rating-item">
+                <span class="rating-label">总体评价</span>
+                <el-rate :model-value="ticketDetail.rating_overall" disabled size="large" />
+              </div>
+            </div>
+            <div v-if="ticketDetail.rating_comment" class="rating-comment">
+              <strong>反馈：</strong>{{ ticketDetail.rating_comment }}
+            </div>
+          </el-card>
+        </div>
+
+        <!-- Chat input for normal states -->
         <ChatInput
-          v-if="selectedRoom.status !== 'closed'"
+          v-else-if="selectedRoom.ticket_status !== 'resolved'"
           ref="chatInputRef"
           placeholder="输入消息... (Enter发送)"
           :onSend="sendTextMessage"
           :onUpload="handleFileUpload"
         />
+
+        <!-- Closed hint -->
         <div v-else class="chat-closed-hint">
           <el-icon><CircleClose /></el-icon> 聊天室已关闭
         </div>
@@ -79,9 +141,10 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MoreFilled, Delete, CircleClose } from '@element-plus/icons-vue'
-import { chatApi, uploadApi } from '@/api'
+import { chatApi, uploadApi, ticketApi } from '@/api'
 import { useUserStore } from '@/store/user'
 import { statusType, statusText } from '@shared/utils/status'
 import { useWebSocket } from '@shared/composables/useWebSocket'
@@ -90,6 +153,7 @@ import ChatInput from '@shared/components/ChatInput.vue'
 
 const store = useUserStore()
 const userId = computed(() => store.userId)
+const route = useRoute()
 
 const rooms = ref([])
 const selectedRoom = ref(null)
@@ -97,6 +161,12 @@ const messages = ref([])
 const loading = ref(false)
 const chatRef = ref(null)
 const chatInputRef = ref(null)
+const ratingAttitude = ref(5)
+const ratingSolution = ref(5)
+const ratingTime = ref(5)
+const ratingOverall = ref(5)
+const ratingComment = ref('')
+const ticketDetail = ref(null)
 
 const { connect, disconnect } = useWebSocket({
   onMessage: (data) => {
@@ -128,6 +198,12 @@ async function loadRooms() {
 async function selectRoom(room) {
   selectedRoom.value = room
   messages.value = []
+  ticketDetail.value = null
+  ratingAttitude.value = 5
+  ratingSolution.value = 5
+  ratingTime.value = 5
+  ratingOverall.value = 5
+  ratingComment.value = ''
   disconnect()
   try {
     const msgRes = await chatApi.getMessages(room.id)
@@ -138,6 +214,13 @@ async function selectRoom(room) {
     connect(`/api/chat/ws/${room.id}`)
   } catch (e) {
     console.error('加载聊天记录失败', e)
+  }
+  try {
+    if (room.ticket_id) {
+      ticketDetail.value = await ticketApi.get(room.ticket_id)
+    }
+  } catch (e) {
+    console.error('加载工单详情失败', e)
   }
 }
 
@@ -169,6 +252,23 @@ async function handleFileUpload(file) {
   }
 }
 
+async function submitRating() {
+  try {
+    await ticketApi.rate(selectedRoom.value.ticket_id, {
+      rating_attitude: ratingAttitude.value,
+      rating_solution: ratingSolution.value,
+      rating_time: ratingTime.value,
+      rating_overall: ratingOverall.value,
+      rating_comment: ratingComment.value,
+    })
+    ElMessage.success('评价成功，感谢您的反馈！')
+    ticketDetail.value = await ticketApi.get(selectedRoom.value.ticket_id)
+    await loadRooms()
+  } catch (e) {
+    ElMessage.error('评价失败')
+  }
+}
+
 async function handleRoomAction(command, room) {
   if (command === 'delete') {
     try {
@@ -197,7 +297,16 @@ function scrollToBottom() {
   })
 }
 
-onMounted(loadRooms)
+onMounted(async () => {
+  await loadRooms()
+  const ticketIdParam = route.query.ticket_id
+  if (ticketIdParam) {
+    const targetRoom = rooms.value.find(r => String(r.ticket_id) === String(ticketIdParam))
+    if (targetRoom) {
+      selectRoom(targetRoom)
+    }
+  }
+})
 </script>
 
 <style scoped>
@@ -272,4 +381,38 @@ onMounted(loadRooms)
 .no-chat-selected { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #cbd5e1; }
 .no-chat-icon { font-size: 64px; margin-bottom: 16px; }
 .no-chat-selected p { font-size: 16px; }
+
+.rating-section {
+  padding: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+.rating-header {
+  font-weight: 600;
+  font-size: 15px;
+  color: #1e293b;
+}
+.rating-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.rating-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rating-label {
+  min-width: 70px;
+  font-size: 13px;
+  color: #475569;
+}
+.rating-comment {
+  margin-top: 12px;
+  padding: 10px;
+  background: #f8fafc;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #475569;
+}
 </style>

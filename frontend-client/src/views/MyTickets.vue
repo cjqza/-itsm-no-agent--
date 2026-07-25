@@ -72,7 +72,7 @@ async function loadTickets() {
   } finally { loading.value = false }
 }
 
-function goToChat(row) { router.push(`/chat/${row.id}`) }
+function goToChat(row) { router.push({ path: '/chat-rooms', query: { ticket_id: row.id } }) }
 </script>
 
 <style scoped>

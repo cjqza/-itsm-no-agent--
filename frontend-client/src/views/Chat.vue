@@ -35,64 +35,6 @@
         <el-button type="warning" @click="handleUrge">催办</el-button>
       </div>
 
-      <!-- 评价卡片 -->
-      <div v-if="ticket?.status === 'resolved_pending_review'" class="rating-section">
-        <el-card>
-          <template #header>
-            <div class="rating-header">📋 服务评价</div>
-          </template>
-          <div class="rating-grid">
-            <div class="rating-item">
-              <span class="rating-label">服务态度</span>
-              <el-rate v-model="ratingAttitude" :max="5" />
-            </div>
-            <div class="rating-item">
-              <span class="rating-label">解决方法</span>
-              <el-rate v-model="ratingSolution" :max="5" />
-            </div>
-            <div class="rating-item">
-              <span class="rating-label">解决时间</span>
-              <el-rate v-model="ratingTime" :max="5" />
-            </div>
-            <div class="rating-item">
-              <span class="rating-label">总体评价</span>
-              <el-rate v-model="ratingOverall" :max="5" size="large" />
-            </div>
-          </div>
-          <el-input v-model="ratingComment" type="textarea" :rows="3" placeholder="补充反馈（可选）" style="margin: 16px 0" />
-          <el-button type="primary" @click="submitRating" style="width: 100%">提交评价</el-button>
-        </el-card>
-      </div>
-
-      <!-- 已评价显示 -->
-      <div v-if="ticket?.status === 'resolved' && ticket?.rating_overall" class="rating-display">
-        <el-card>
-          <template #header>
-            <div class="rating-header">✅ 服务评价</div>
-          </template>
-          <div class="rating-grid">
-            <div class="rating-item">
-              <span class="rating-label">服务态度</span>
-              <el-rate :model-value="ticket.rating_attitude" disabled />
-            </div>
-            <div class="rating-item">
-              <span class="rating-label">解决方法</span>
-              <el-rate :model-value="ticket.rating_solution" disabled />
-            </div>
-            <div class="rating-item">
-              <span class="rating-label">解决时间</span>
-              <el-rate :model-value="ticket.rating_time" disabled />
-            </div>
-            <div class="rating-item">
-              <span class="rating-label">总体评价</span>
-              <el-rate :model-value="ticket.rating_overall" disabled size="large" />
-            </div>
-          </div>
-          <div v-if="ticket.rating_comment" class="rating-comment">
-            <strong>反馈：</strong>{{ ticket.rating_comment }}
-          </div>
-        </el-card>
-      </div>
     </div>
   </div>
 </template>
@@ -117,11 +59,6 @@ const ticket = ref(null)
 const messages = ref([])
 const chatRef = ref(null)
 const chatInputRef = ref(null)
-const ratingAttitude = ref(5)
-const ratingSolution = ref(5)
-const ratingTime = ref(5)
-const ratingOverall = ref(5)
-const ratingComment = ref('')
 const currentRoomId = ref(null)
 
 const { connect, disconnect } = useWebSocket({
@@ -190,20 +127,6 @@ async function handleUpload(file) {
   } catch (e) { ElMessage.error('文件上传失败') }
 }
 
-async function submitRating() {
-  try {
-    await ticketApi.rate(ticketId, {
-      rating_attitude: ratingAttitude.value,
-      rating_solution: ratingSolution.value,
-      rating_time: ratingTime.value,
-      rating_overall: ratingOverall.value,
-      rating_comment: ratingComment.value,
-    })
-    ElMessage.success('评价成功，感谢您的反馈！')
-    await loadTicket()
-  } catch (e) { ElMessage.error('评价失败') }
-}
-
 async function handleCancel() {
   try {
     await ElMessageBox.confirm('确定要取消此工单吗？取消后将自动关闭。', '确认取消', { type: 'warning' })
@@ -252,33 +175,6 @@ function scrollToBottom() {
 .chat-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .messages { flex: 1; overflow-y: auto; padding: 20px; }
 
-.rating-section { padding: 16px; border-top: 1px solid #f0f0f0; }
-.rating-display { padding: 16px; border-top: 1px solid #f0f0f0; }
-.rating-header { font-weight: 600; font-size: 15px; color: #1e293b; }
-.rating-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-.rating-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.rating-label {
-  min-width: 70px;
-  font-size: 13px;
-  color: #475569;
-}
-.rating-comment {
-  margin-top: 12px;
-  padding: 10px;
-  background: #f8fafc;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #475569;
-}
 
 .action-buttons {
   display: flex;
