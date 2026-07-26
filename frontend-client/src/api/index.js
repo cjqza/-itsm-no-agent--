@@ -41,4 +41,18 @@ export const chatApi = {
   getUnread: (roomId) => api.get(`/chat/rooms/${roomId}/unread`),
 }
 
+export const aiApi = {
+  chat: (data) => api.post('/ai/chat', data),
+  chatStream: async (data, token, signal) => {
+    const response = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ ...data, stream: true }),
+      signal,
+    })
+    return response
+  },
+  knowledgeStatus: () => api.get('/ai/knowledge/status'),
+}
+
 export default api
