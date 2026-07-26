@@ -2,6 +2,13 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-26] ITSM 工单实时更新修复：创建工单后自动通知客服端刷新
+- **变更**：(1) 后端 `main.py` 新增全局通知 WebSocket 端点 `/ws`（JWT 认证 + 心跳 + 连接数限制），限流中间件跳过 `/ws` 路径。(2) 后端 `itsm.py` 的 `create_ticket` 成功后广播 `new_ticket` 事件给所有已连接的客服。(3) 前端 `frontend-agent/src/store/user.js` 新增全局 WS 连接管理（`onWsMessage` 回调机制）。(4) `Dashboard.vue` 监听 `new_ticket`/`ticket_update` 事件自动刷新看板数据。(5) `TicketList.vue` 同样监听并自动刷新工单列表。5 个文件变更，+111 / -3。
+- **原因**：工单创建后客服端需要手动刷新才能看到新工单，实时性差；新增全局 WebSocket 通知机制，客服端无需轮询即可实时感知新工单和状态变更。
+- **影响**：`backend/app/main.py`（新增 /ws 端点 + 限流跳过）；`backend/app/api/itsm.py`（create_ticket 后广播通知）；`frontend-agent/src/store/user.js`（WS 连接管理）；`frontend-agent/src/views/Dashboard.vue`（自动刷新）；`frontend-agent/src/views/TicketList.vue`（自动刷新）。后端新增 1 个全局 WS 端点，前端 ITSM 客服端体验增强。
+- **提交**：`ee33ad3`
+- **测试**：73/73 全部通过。
+
 ## [2026-07-25] OPS 统计系统增强：新增图表接口、全部时间筛选、权限修复
 - **变更**：(1) 后端新增 4 个 OPS 专用接口：`/ops/tickets`（工单列表）、`/ops/status-distribution`（状态分布）、`/ops/category-stats`（管理单元统计含平均处理时长）、`/ops/rating-distribution`（评分分布）。(2) 所有 OPS 统计接口的 `days` 参数从必填（默认 30 天）改为可选（None = 全部历史数据）。(3) 前端 Overview.vue 增加「全部」时间筛选选项，改用新专用接口渲染状态分布饼图、管理单元柱状图（含平均处理时长 tooltip）、评分分布柱状图。(4) TicketHistory.vue 权限修复：`loadCategories` 改用公开的 `/itsm/categories` 接口，`loadTickets` 改用 OPS 专用工单列表接口。(5) `frontend-ops/src/api/index.js` 新增 4 个 API 方法。4 个文件变更，+203 / -38。
 - **原因**：OPS 统计缺乏专用图表接口，前端依赖通用接口拼装数据效率低；`days` 硬编码 30 天无法查看全部历史数据；TicketHistory 的分类加载和工单列表使用了需要 itsm_access 权限的接口，OPS 用户无法正常访问。
