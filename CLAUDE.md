@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-公司桌面IT服务台 (Company Desktop IT Service Desk) — an IT ticket management platform with four separate frontends and one shared backend. Users submit repair requests via a chat-like interface, agents pick up tickets manually, and both parties communicate through a built-in WebSocket chat system.
+公司桌面IT服务台 (Company Desktop IT Service Desk) — an IT ticket management platform with four separate frontends, one shared backend, and an AI-powered intelligent customer service system. Users submit repair requests via a chat-like interface, agents pick up tickets manually, and both parties communicate through a built-in WebSocket chat system.
 
 ## Quick Start
 
@@ -70,6 +70,7 @@ docker-compose up -d
 - **Cache**: `app/utils/redis.py` — Redis cache with automatic fallback to in-memory when Redis unavailable
 - **WebSocket**: Two separate WS systems — global notification WS in `utils/websocket.py`, chat-specific WS in `api/chat.py`. Per-user connection limit: 5.
 - **Background tasks**: `app/tasks/sla_checker.py` — APScheduler runs every minute to update SLA status colors
+- **AI module**: `app/ai/` — RAG pipeline with ChromaDB + BGE embeddings + LLM (Qwen2.5/DeepSeek)
 
 ### Frontend Shared Layer (`shared/`)
 
@@ -117,7 +118,7 @@ pending → accepted → processing → resolved_pending_review → resolved
 
 **状态流转验证**: `VALID_TRANSITIONS` dict in `ticket_service.py` enforces legal transitions only.
 
-SLA color coding: green (normal) → yellow (50%+) → red (80%+) → black (overdue). SLA paused/resumed via dedicated endpoints.
+SLA color coding: green (normal) → yellow (30%+) → red (50%+) → black (overdue). SLA paused/resumed via dedicated endpoints.
 
 ## Authentication System
 
@@ -164,6 +165,42 @@ SLA color coding: green (normal) → yellow (50%+) → red (80%+) → black (ove
 
 All logins require CAPTCHA. In tests, use `X-Test-Mode: true` header to bypass.
 
+## AI Intelligent Customer Service
+
+The system includes a RAG (Retrieval-Augmented Generation) AI chatbot for intelligent customer service.
+
+### Architecture
+```
+User question → Embedding → ChromaDB search → BGE-Reranker → LLM → Answer
+```
+
+### Components (`backend/app/ai/`)
+- `embeddings.py` — BGE-small-zh-v1.5 (local CPU) or OpenAI API
+- `vectorstore.py` — ChromaDB persistent storage
+- `llm.py` — Qwen2.5 (local CPU via ctransformers/transformers) or DeepSeek API
+- `rag.py` — RAG pipeline (retrieve → rerank → generate)
+- `knowledge.py` — Knowledge base builder (tickets + FAQ docs)
+- `prompts.py` — Prompt templates
+
+### API Endpoints
+- `POST /api/ai/chat` — AI chat (supports SSE streaming)
+- `POST /api/ai/knowledge/sync` — Sync knowledge base (admin only)
+- `GET /api/ai/knowledge/status` — Knowledge base status
+
+### Configuration
+```env
+AI_LLM_PROVIDER=transformers          # or deepseek
+AI_LLM_MODEL_PATH=./models/Qwen2.5-1.5B-Instruct
+AI_EMBEDDING_PROVIDER=bge
+AI_EMBEDDING_MODEL=./models/bge-small-zh-v1.5
+AI_VECTORSTORE_PATH=./chroma_db
+```
+
+### Knowledge Base
+- Auto-syncs from resolved tickets
+- Manual FAQ documents in `backend/data/faq/` (Markdown, `##` headings)
+- SOP documents in `backend/data/sop/`
+
 ## Key Patterns
 
 **`_ticket_to_dict` safety**: When converting Ticket ORM objects to dicts, always use the `safe_rel_name()` helper that checks `ticket.__dict__` before accessing relationships — accessing unloaded relationships in async SQLAlchemy raises `MissingGreenlet`.
@@ -183,6 +220,8 @@ All logins require CAPTCHA. In tests, use `X-Test-Mode: true` header to bypass.
 **`has_permission()` helper**: Use `from app.utils.auth import has_permission` for inline permission checks that reuse the cache (e.g. in `itsm.py`'s `_has_itsm_access`).
 
 **Login always requires CAPTCHA**: `LoginRequest` requires `captcha_id` and `captcha_text`. Frontend must load captcha via `GET /api/auth/captcha` before showing login form.
+
+**ChromaDB embedding**: Always pass `embedding_function=NullEmbeddingFunction()` (512-dim) to `get_or_create_collection` to avoid ChromaDB downloading its default onnx model.
 
 ## Common Issues
 
@@ -214,3 +253,6 @@ Copy `backend/.env.example` to `backend/.env`. Key vars:
 - `REDIS_URL`: Redis connection (empty = use in-memory fallback)
 - `TRUST_PROXY`: `false` (default) — set to `true` behind reverse proxy to trust X-Forwarded-For
 - `CORS_ORIGINS`: Comma-separated allowed origins (default: localhost ports)
+- `AI_LLM_PROVIDER`: `transformers` (default) or `deepseek`
+- `AI_EMBEDDING_PROVIDER`: `bge` (default) or `openai`
+- `AI_VECTORSTORE_PATH`: ChromaDB storage path (default: `./chroma_db`)

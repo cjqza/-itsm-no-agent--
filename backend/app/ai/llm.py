@@ -1,7 +1,8 @@
 """AI / RAG LLM 抽象层
 
-惰性导入重型依赖（llama_cpp、httpx），不安装时不影响其他功能。
-llama-cpp-python 需要用户手动安装（编译复杂），代码中用 try/except 给出友好提示。
+惰性导入重型依赖（ctransformers、transformers、httpx），不安装时不影响其他功能。
+ctransformers 用于加载本地 GGUF 模型，替代 llama-cpp-python（Windows 编译问题）。
+transformers 用于加载完整 HuggingFace 模型（如 Qwen2.5-1.5B-Instruct）。
 """
 import asyncio
 import json
@@ -33,10 +34,10 @@ class BaseLLM(ABC):
 
 
 class GGUFLLM(BaseLLM):
-    """本地 llama-cpp-python GGUF 模型
+    """本地 ctransformers GGUF 模型
 
     通过 asyncio.to_thread() 将同步推理包装为异步调用。
-    注意：llama-cpp-python 需要用户手动安装（编译复杂）。
+    使用 ctransformers 替代 llama-cpp-python（Windows 上编译更简单）。
     """
 
     def __init__(self, model_path: str, max_tokens: int = 1024, temperature: float = 0.7):
@@ -50,27 +51,40 @@ class GGUFLLM(BaseLLM):
         if self._llm is not None:
             return
         try:
-            from llama_cpp import Llama
+            from ctransformers import AutoModelForCausalLM
         except ImportError:
             raise ImportError(
-                "llama-cpp-python 未安装。请参考 https://github.com/abetlen/llama-cpp-python "
-                "手动安装（需要 C++ 编译环境）。"
+                "ctransformers 未安装。请执行: pip install ctransformers"
             )
         if not self._model_path:
             raise ValueError("AI_LLM_MODEL_PATH 未配置，请在 .env 中设置 GGUF 模型路径")
         logger.info(f"正在加载 GGUF 模型: {self._model_path}")
-        self._llm = Llama(model_path=self._model_path, n_ctx=4096, verbose=False)
+        self._llm = AutoModelForCausalLM.from_pretrained(
+            self._model_path,
+            model_type="qwen2",
+            max_new_tokens=self._max_tokens,
+            temperature=self._temperature,
+        )
         logger.info("GGUF 模型加载完成")
+
+    def _messages_to_prompt(self, messages: list[dict]) -> str:
+        """将 OpenAI 格式的 messages 转为 ctransformers 可用的 prompt 字符串"""
+        parts = []
+        for m in messages:
+            if m["role"] == "system":
+                parts.append(f"<|system|>\n{m['content']}")
+            elif m["role"] == "user":
+                parts.append(f"<|user|>\n{m['content']}")
+            elif m["role"] == "assistant":
+                parts.append(f"<|assistant|>\n{m['content']}")
+        parts.append("<|assistant|>")
+        return "\n".join(parts)
 
     def _generate_sync(self, messages: list[dict]) -> str:
         """同步生成"""
         self._load_model()
-        response = self._llm.create_chat_completion(
-            messages=messages,
-            max_tokens=self._max_tokens,
-            temperature=self._temperature,
-        )
-        return response["choices"][0]["message"]["content"]
+        prompt = self._messages_to_prompt(messages)
+        return self._llm(prompt)
 
     async def generate(self, messages: list[dict]) -> str:
         """异步生成回答"""
@@ -79,29 +93,21 @@ class GGUFLLM(BaseLLM):
     async def stream(self, messages: list[dict]) -> AsyncGenerator[str, None]:
         """流式生成回答
 
-        注意：llama-cpp-python 的流式是同步迭代器，需要在线程中运行。
-        这里使用一个队列桥接同步流和异步生成器。
+        ctransformers 的 __call__ 支持 stream=True 返回同步迭代器，
+        使用队列桥接同步流和异步生成器。
         """
         self._load_model()
+        prompt = self._messages_to_prompt(messages)
         queue: asyncio.Queue = asyncio.Queue()
         sentinel = object()
         loop = asyncio.get_running_loop()
 
         def _stream_sync():
             try:
-                stream = self._llm.create_chat_completion(
-                    messages=messages,
-                    max_tokens=self._max_tokens,
-                    temperature=self._temperature,
-                    stream=True,
-                )
-                for chunk in stream:
-                    delta = chunk["choices"][0].get("delta", {})
-                    content = delta.get("content", "")
-                    if content:
-                        # 使用 run_coroutine_threadsafe 将数据放入队列
+                for token in self._llm(prompt, stream=True):
+                    if token:
                         asyncio.run_coroutine_threadsafe(
-                            queue.put(content), loop
+                            queue.put(token), loop
                         )
             except Exception as e:
                 logger.error(f"GGUF 流式生成异常: {e}")
@@ -123,6 +129,96 @@ class GGUFLLM(BaseLLM):
     @property
     def provider_name(self) -> str:
         return "gguf"
+
+
+class TransformersLLM(BaseLLM):
+    """transformers 库加载本地模型（CPU 推理）
+
+    使用 transformers.AutoModelForCausalLM + AutoTokenizer。
+    模型在首次调用时惰性加载。
+    通过 asyncio.to_thread() 包装为异步。
+    """
+
+    def __init__(self, model_path: str, max_tokens: int = 512, temperature: float = 0.7):
+        self._model_path = model_path
+        self._max_tokens = max_tokens
+        self._temperature = temperature
+        self._model = None
+        self._tokenizer = None
+
+    def _load_model(self):
+        """惰性加载模型"""
+        if self._model is not None:
+            return
+        try:
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+            import torch
+        except ImportError:
+            raise ImportError(
+                "transformers 或 torch 未安装。请执行: pip install transformers torch"
+            )
+        if not self._model_path:
+            raise ValueError("AI_LLM_MODEL_PATH 未配置，请在 .env 中设置模型路径")
+        logger.info(f"正在加载 transformers 模型: {self._model_path}")
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            self._model_path, trust_remote_code=True
+        )
+        self._model = AutoModelForCausalLM.from_pretrained(
+            self._model_path,
+            dtype=torch.float32,  # CPU 用 float32
+            device_map="cpu",
+            trust_remote_code=True,
+        )
+        logger.info("transformers 模型加载完成")
+
+    def _messages_to_prompt(self, messages: list[dict]) -> str:
+        """将 OpenAI 格式 messages 转为 prompt 字符串"""
+        parts = []
+        for m in messages:
+            role = m.get("role", "user")
+            content = m.get("content", "")
+            if role == "system":
+                parts.append(f"<|system|>\n{content}")
+            elif role == "user":
+                parts.append(f"<|user|>\n{content}")
+            elif role == "assistant":
+                parts.append(f"<|assistant|>\n{content}")
+        parts.append("<|assistant|>")
+        return "\n".join(parts)
+
+    def _generate_sync(self, messages: list[dict]) -> str:
+        """同步生成"""
+        self._load_model()
+        import torch
+        prompt = self._messages_to_prompt(messages)
+        inputs = self._tokenizer(prompt, return_tensors="pt").to(self._model.device)
+        with torch.no_grad():
+            outputs = self._model.generate(
+                **inputs,
+                max_new_tokens=self._max_tokens,
+                temperature=self._temperature,
+                do_sample=True,
+                pad_token_id=self._tokenizer.eos_token_id,
+            )
+        # 只取新生成的 token
+        new_tokens = outputs[0][inputs["input_ids"].shape[1]:]
+        return self._tokenizer.decode(new_tokens, skip_special_tokens=True)
+
+    async def generate(self, messages: list[dict]) -> str:
+        """异步生成回答"""
+        return await asyncio.to_thread(self._generate_sync, messages)
+
+    async def stream(self, messages: list[dict]) -> AsyncGenerator[str, None]:
+        """流式生成回答
+
+        transformers 没有原生流式 generate，用同步方式返回完整结果。
+        """
+        result = await self.generate(messages)
+        yield result
+
+    @property
+    def provider_name(self) -> str:
+        return "transformers"
 
 
 class DeepSeekLLM(BaseLLM):
@@ -227,6 +323,12 @@ def create_llm(config) -> BaseLLM:
             max_tokens=config.AI_LLM_MAX_TOKENS,
             temperature=config.AI_LLM_TEMPERATURE,
         )
+    elif provider == "transformers":
+        return TransformersLLM(
+            model_path=config.AI_LLM_MODEL_PATH,
+            max_tokens=config.AI_LLM_MAX_TOKENS,
+            temperature=config.AI_LLM_TEMPERATURE,
+        )
     elif provider == "deepseek":
         return DeepSeekLLM(
             api_key=config.AI_LLM_API_KEY,
@@ -236,4 +338,4 @@ def create_llm(config) -> BaseLLM:
             temperature=config.AI_LLM_TEMPERATURE,
         )
     else:
-        raise ValueError(f"不支持的 LLM 提供商: {provider}，可选: deepseek, gguf")
+        raise ValueError(f"不支持的 LLM 提供商: {provider}，可选: gguf, transformers, deepseek")

@@ -40,9 +40,17 @@ class VectorStoreManager:
             )
         logger.info(f"正在初始化 ChromaDB，存储路径: {self._persist_directory}")
         self._client = chromadb.PersistentClient(path=self._persist_directory)
+
+        # 使用自定义 embedding function，避免 ChromaDB 下载 onnx 模型
+        from chromadb import EmbeddingFunction
+        class NullEmbeddingFunction(EmbeddingFunction):
+            def __call__(self, input):
+                return [[0.0] * 512 for _ in input]  # BGE-small-zh 输出 512 维
+
         self._collection = self._client.get_or_create_collection(
             name="knowledge",
             metadata={"hnsw:space": "cosine"},
+            embedding_function=NullEmbeddingFunction(),
         )
         logger.info(f"ChromaDB 初始化完成，当前文档数: {self._collection.count()}")
 
@@ -179,9 +187,15 @@ class VectorStoreManager:
             self._client.delete_collection("knowledge")
         except Exception:
             pass
+        from chromadb import EmbeddingFunction
+        class NullEmbeddingFunction(EmbeddingFunction):
+            def __call__(self, input):
+                return [[0.0] * 512 for _ in input]
+
         self._collection = self._client.get_or_create_collection(
             name="knowledge",
             metadata={"hnsw:space": "cosine"},
+            embedding_function=NullEmbeddingFunction(),
         )
         logger.info("ChromaDB knowledge 集合已清空")
 
