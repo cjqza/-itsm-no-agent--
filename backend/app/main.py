@@ -25,6 +25,7 @@ from app.api.admin import (
 from app.api.upload import router as upload_router
 from app.api.templates import router as template_router
 from app.api.captcha import router as captcha_router
+from app.api.ai_chat import router as ai_chat_router
 
 settings = get_settings()
 
@@ -117,6 +118,8 @@ def _determine_rate_limit_group(path: str) -> str:
         return "register"
     elif "/auth/captcha" in path:
         return "captcha"
+    elif "/ai/chat" in path:
+        return "ai_chat"
     else:
         return "api"
 
@@ -236,6 +239,14 @@ async def rate_limit_middleware(request: Request, call_next):
                 status_code=429,
                 content={"detail": "请求过于频繁，请稍后再试"},
             )
+    # AI 聊天接口: 可配置限流（默认20次/分钟/IP）
+    elif "/ai/chat" in path:
+        if not await _check_rate_limit(client_ip, path, limit=settings.AI_RATE_LIMIT_PER_MINUTE, window=60):
+            logger.warning(f"限流: {client_ip} AI 聊天接口请求过于频繁")
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "AI 聊天请求过于频繁，请稍后再试"},
+            )
     # 其他API: 120次/分钟
     elif path.startswith("/api/") or path.startswith("/admin/"):
         if not await _check_rate_limit(client_ip, path, limit=120, window=60):
@@ -285,6 +296,7 @@ app.include_router(cause_router)
 app.include_router(solution_router)
 app.include_router(upload_router)
 app.include_router(template_router)
+app.include_router(ai_chat_router)
 
 
 @app.websocket("/ws")
