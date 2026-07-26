@@ -149,6 +149,8 @@ async def statistics_by_agent(
 @router.get("/statistics/ratings")
 async def statistics_ratings(
     days: Optional[int] = Query(None, ge=1, le=365),
+    min_rating: Optional[int] = Query(None, ge=1, le=5),
+    max_rating: Optional[int] = Query(None, ge=1, le=5),
     current_user: User = Depends(require_permission("ops_access")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -171,12 +173,15 @@ async def statistics_ratings(
     distribution = [{"rating": i, "count": dist_map.get(i, 0)} for i in range(1, 6)]
 
     # 最近评价
+    recent_conditions = [Ticket.rating.isnot(None), Ticket.created_at >= since]
+    if min_rating is not None:
+        recent_conditions.append(Ticket.rating >= min_rating)
+    if max_rating is not None:
+        recent_conditions.append(Ticket.rating <= max_rating)
+
     recent = await db.execute(
         select(Ticket)
-        .where(
-            Ticket.rating.isnot(None),
-            Ticket.created_at >= since,
-        )
+        .where(*recent_conditions)
         .order_by(Ticket.rated_at.desc())
         .limit(10)
     )
@@ -185,7 +190,10 @@ async def statistics_ratings(
         {
             "ticket_no": t.ticket_no,
             "title": t.title,
-            "rating": t.rating,
+            "rating_attitude": t.rating_attitude,
+            "rating_solution": t.rating_solution,
+            "rating_time": t.rating_time,
+            "rating_overall": t.rating_overall or t.rating,
             "comment": t.rating_comment,
             "rated_at": t.rated_at.isoformat() if t.rated_at else None,
         }
