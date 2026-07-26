@@ -245,7 +245,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ticketApi, chatApi, adminApi, classificationApi } from '@/api'
 import { ElMessage } from 'element-plus'
-import { priorityType, slaColor, slaText, slaTagType } from '@shared/utils/status'
+import { priorityType, slaColor, slaText, slaTagType, slaColorByPercent } from '@shared/utils/status'
 import { formatTime } from '@shared/utils/format'
 import { useWebSocket } from '@shared/composables/useWebSocket'
 
@@ -384,13 +384,6 @@ const slaRemaining = computed(() => {
   return `${hours}h ${minutes}m`
 })
 
-// SLA颜色：基于百分比（0-50绿，50-80黄，80-100红，100+黑）
-function slaColorByPercent(percent) {
-  if (percent >= 100) return '#333'
-  if (percent >= 80) return '#f56c6c'
-  if (percent >= 50) return '#e6a23c'
-  return '#67c23a'
-}
 
 async function handleAccept() {
   try {

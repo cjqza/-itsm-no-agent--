@@ -34,3 +34,11 @@ export function slaText(s) {
 export function slaTagType(s) {
   return { green: 'success', yellow: 'warning', red: 'danger', black: 'info' }[s] || 'info'
 }
+
+// SLA 百分比 → 颜色值（0-50绿，50-80黄，80-100红，100+黑）
+export function slaColorByPercent(percent) {
+  if (percent >= 100) return '#333'
+  if (percent >= 80) return '#f56c6c'
+  if (percent >= 50) return '#e6a23c'
+  return '#67c23a'
+}

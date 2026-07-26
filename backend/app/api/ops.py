@@ -16,6 +16,13 @@ from app.utils import escape_like
 router = APIRouter(prefix="/api/ops", tags=["OPS"])
 
 
+def _since_date(days: Optional[int] = None) -> datetime:
+    """返回时间筛选起点：有 days 则倒推，否则返回极早日期"""
+    if days:
+        return datetime.now(timezone.utc) - timedelta(days=days)
+    return datetime(2000, 1, 1, tzinfo=timezone.utc)
+
+
 @router.get("/statistics/overview")
 async def statistics_overview(
     days: Optional[int] = Query(None, ge=1, le=365),
@@ -23,7 +30,7 @@ async def statistics_overview(
     db: AsyncSession = Depends(get_db),
 ):
     """总览统计"""
-    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
+    since = _since_date(days)
 
     # 总工单数
     total_result = await db.execute(
@@ -87,7 +94,7 @@ async def statistics_by_category(
     db: AsyncSession = Depends(get_db),
 ):
     """按管理单元统计"""
-    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
+    since = _since_date(days)
 
     result = await db.execute(
         select(
@@ -112,7 +119,7 @@ async def statistics_by_agent(
     db: AsyncSession = Depends(get_db),
 ):
     """按客服统计"""
-    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
+    since = _since_date(days)
 
     result = await db.execute(
         select(
@@ -155,7 +162,7 @@ async def statistics_ratings(
     db: AsyncSession = Depends(get_db),
 ):
     """评价统计"""
-    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
+    since = _since_date(days)
 
     # 评分分布（单次查询）
     dist_result = await db.execute(
@@ -213,7 +220,7 @@ async def sla_compliance(
     db: AsyncSession = Depends(get_db),
 ):
     """SLA达标率详情"""
-    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
+    since = _since_date(days)
 
     result = await db.execute(
         select(
@@ -256,11 +263,8 @@ async def statistics_trend(
     if start_date and end_date:
         since = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         until = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
-    elif days:
-        since = datetime.now(timezone.utc) - timedelta(days=days)
-        until = datetime.now(timezone.utc)
     else:
-        since = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        since = _since_date(days)
         until = datetime.now(timezone.utc)
 
     result = await db.execute(
@@ -290,7 +294,7 @@ async def export_tickets(
     from openpyxl import Workbook
     import io
 
-    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
+    since = _since_date(days)
 
     conditions = [Ticket.created_at >= since]
     if status:
@@ -384,19 +388,15 @@ async def list_tickets(
     """OPS工单列表（查看所有工单）"""
     from app.services.ticket_service import ticket_service
 
-    query = select(Ticket).options(
-        selectinload(Ticket.category),
-        selectinload(Ticket.creator),
-        selectinload(Ticket.assignee),
-    )
-
+    # 构建公共筛选条件
+    conditions = []
     if status:
-        query = query.where(Ticket.status == status)
+        conditions.append(Ticket.status == status)
     if category_id:
-        query = query.where(Ticket.category_id == category_id)
+        conditions.append(Ticket.category_id == category_id)
     if keyword:
         safe_kw = escape_like(keyword)
-        query = query.where(
+        conditions.append(
             or_(
                 Ticket.ticket_no.like(f"%{safe_kw}%", escape="\\"),
                 Ticket.title.like(f"%{safe_kw}%", escape="\\"),
@@ -404,24 +404,23 @@ async def list_tickets(
         )
 
     # Count
-    count_query = select(func.count(Ticket.id))
-    if status:
-        count_query = count_query.where(Ticket.status == status)
-    if category_id:
-        count_query = count_query.where(Ticket.category_id == category_id)
-    if keyword:
-        safe_kw = escape_like(keyword)
-        count_query = count_query.where(
-            or_(
-                Ticket.ticket_no.like(f"%{safe_kw}%", escape="\\"),
-                Ticket.title.like(f"%{safe_kw}%", escape="\\"),
-            )
-        )
+    count_query = select(func.count(Ticket.id)).where(*conditions)
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    query = query.order_by(Ticket.created_at.desc())
-    query = query.offset((page - 1) * page_size).limit(page_size)
+    # Data query
+    query = (
+        select(Ticket)
+        .options(
+            selectinload(Ticket.category),
+            selectinload(Ticket.creator),
+            selectinload(Ticket.assignee),
+        )
+        .where(*conditions)
+        .order_by(Ticket.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
     result = await db.execute(query)
     tickets = result.scalars().all()
 
@@ -445,8 +444,7 @@ async def status_distribution(
     """工单状态分布"""
     conditions = []
     if days:
-        since = datetime.now(timezone.utc) - timedelta(days=days)
-        conditions.append(Ticket.created_at >= since)
+        conditions.append(Ticket.created_at >= _since_date(days))
 
     result = await db.execute(
         select(Ticket.status, func.count(Ticket.id).label("count"))
@@ -468,8 +466,7 @@ async def category_stats(
     """管理单元统计（含平均处理时长）"""
     conditions = []
     if days:
-        since = datetime.now(timezone.utc) - timedelta(days=days)
-        conditions.append(Ticket.created_at >= since)
+        conditions.append(Ticket.created_at >= _since_date(days))
 
     result = await db.execute(
         select(
@@ -512,8 +509,7 @@ async def rating_distribution(
     """评分分布"""
     conditions = [Ticket.rating.isnot(None)]
     if days:
-        since = datetime.now(timezone.utc) - timedelta(days=days)
-        conditions.append(Ticket.created_at >= since)
+        conditions.append(Ticket.created_at >= _since_date(days))
 
     result = await db.execute(
         select(Ticket.rating, func.count(Ticket.id).label("count"))

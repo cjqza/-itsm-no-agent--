@@ -103,13 +103,13 @@
               <div class="ticket-list">
                 <div v-for="t in myProcessingTickets" :key="t.id" class="ticket-item" @click="goToDetail(t)">
                   <div class="ticket-left">
-                    <div class="sla-bar" :style="{ background: getSlaColor(getSlaPercent(t)) }"></div>
+                    <div class="sla-bar" :style="{ background: slaColorByPercent(getSlaPercent(t)) }"></div>
                   </div>
                   <div class="ticket-body">
                     <div class="ticket-title">{{ t.ticket_no }} - {{ t.title }}</div>
                     <div class="sla-progress">
-                      <el-progress :percentage="Math.min(100, getSlaPercent(t))" :color="getSlaColor(getSlaPercent(t))" :stroke-width="6" />
-                      <span class="sla-text" :style="{ color: getSlaColor(getSlaPercent(t)) }">
+                      <el-progress :percentage="Math.min(100, getSlaPercent(t))" :color="slaColorByPercent(getSlaPercent(t))" :stroke-width="6" />
+                      <span class="sla-text" :style="{ color: slaColorByPercent(getSlaPercent(t)) }">
                         {{ getSlaStatusText(getSlaPercent(t)) }}
                       </span>
                     </div>
@@ -159,7 +159,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ticketApi } from '@/api'
 import { ElMessage } from 'element-plus'
-import { slaColor, statusTagType, statusText } from '@shared/utils/status'
+import { slaColor, statusTagType, statusText, slaColorByPercent } from '@shared/utils/status'
 import { formatShortTime as formatTime } from '@shared/utils/format'
 
 const router = useRouter()
@@ -258,12 +258,6 @@ function getSlaPercent(t) {
   return Math.min(200, Math.round((elapsed - pausedSeconds * 1000) / total * 100))
 }
 
-function getSlaColor(percent) {
-  if (percent >= 100) return '#333'    // 黑色：超时
-  if (percent >= 80) return '#f56c6c'  // 红色：80%+
-  if (percent >= 50) return '#e6a23c'  // 黄色：50%+
-  return '#67c23a'                     // 绿色：正常
-}
 
 function getSlaStatusText(percent) {
   if (percent >= 100) return '已超时'

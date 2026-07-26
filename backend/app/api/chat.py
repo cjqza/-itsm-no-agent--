@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime, timezone
 
 from app.database import get_db, AsyncSessionLocal
 from app.models.user import User
@@ -383,7 +384,6 @@ async def close_chat_room(
     """关闭聊天室"""
     room = await _check_room_access(room_id, current_user, db)
 
-    from datetime import datetime, timezone
     room.status = RoomStatus.CLOSED
     room.closed_at = datetime.now(timezone.utc)
 
@@ -440,7 +440,6 @@ async def mark_messages_read(
     already_read = {row[0] for row in existing.all()}
 
     # 插入新的已读记录
-    from datetime import datetime, timezone
     new_reads = []
     for msg_id in message_ids:
         if msg_id not in already_read:
@@ -576,6 +575,7 @@ async def websocket_chat(websocket: WebSocket, room_id: int, token: str = ""):
             if access_room.ticket:
                 from app.models.user import UserRole
                 has_access = False
+                ws_user = None
                 if access_room.ticket.creator_id == user_id or access_room.ticket.assignee_id == user_id:
                     has_access = True
                 if not has_access:
