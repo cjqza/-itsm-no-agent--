@@ -16,8 +16,8 @@
           end-placeholder="结束日期"
           size="default"
           style="width: 260px"
+          value-format="YYYY-MM-DD"
           @change="onDateRangeChange"
-          :disabled="!!days"
         />
         <el-button type="primary" plain @click="handleExport">
           <el-icon><Download /></el-icon> 导出报表
@@ -173,14 +173,6 @@ function onDateRangeChange() {
   loadData()
 }
 
-// 将 Date 对象转为 YYYY-MM-DD
-function fmtDate(d) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${dd}`
-}
-
 async function loadData() {
   loading.value = true
   try {
@@ -188,8 +180,8 @@ async function loadData() {
     // 趋势图支持日期范围筛选
     const trendParams = d
       ? { days: d }
-      : dateRange.value
-        ? { start_date: fmtDate(dateRange.value[0]), end_date: fmtDate(dateRange.value[1]) }
+      : dateRange.value && dateRange.value.length === 2
+        ? { start_date: dateRange.value[0], end_date: dateRange.value[1] }
         : {}
 
     const [ov, trend, statusDist, catStats, ratingDist] = await Promise.all([
