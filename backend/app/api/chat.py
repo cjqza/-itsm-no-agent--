@@ -70,6 +70,46 @@ async def _check_room_access(room_id: int, current_user: User, db: AsyncSession)
     raise HTTPException(status_code=403, detail="无权访问此聊天室")
 
 
+async def _batch_unread_counts(
+    db: AsyncSession, room_ids: list[int], user_id: int
+) -> dict[int, int]:
+    """批量计算多个房间的未读消息数。返回 {room_id: unread_count}"""
+    # 每个房间的非本人消息总数
+    total_result = await db.execute(
+        select(
+            ChatMessage.room_id,
+            func.count(ChatMessage.id).label("cnt"),
+        )
+        .where(
+            ChatMessage.room_id.in_(room_ids),
+            ChatMessage.sender_id != user_id,
+        )
+        .group_by(ChatMessage.room_id)
+    )
+    total_counts = {row[0]: row[1] for row in total_result.all()}
+
+    # 每个房间的已读消息数
+    read_result = await db.execute(
+        select(
+            ChatMessage.room_id,
+            func.count(ChatMessageRead.id).label("cnt"),
+        )
+        .select_from(ChatMessageRead)
+        .join(ChatMessage, ChatMessageRead.message_id == ChatMessage.id)
+        .where(
+            ChatMessage.room_id.in_(room_ids),
+            ChatMessageRead.user_id == user_id,
+        )
+        .group_by(ChatMessage.room_id)
+    )
+    read_counts = {row[0]: row[1] for row in read_result.all()}
+
+    return {
+        room_id: max(0, total_counts.get(room_id, 0) - read_counts.get(room_id, 0))
+        for room_id in room_ids
+    }
+
+
 @router.post("/rooms/{ticket_id}")
 async def create_chat_room(
     ticket_id: int,
@@ -154,43 +194,14 @@ async def get_my_rooms(
     )
     last_msgs = {msg.room_id: msg for msg in last_msg_result.scalars().all()}
 
-    # 批量查询：每个房间的非本人消息总数
-    total_result = await db.execute(
-        select(
-            ChatMessage.room_id,
-            func.count(ChatMessage.id).label("cnt"),
-        )
-        .where(
-            ChatMessage.room_id.in_(room_ids),
-            ChatMessage.sender_id != current_user.id,
-        )
-        .group_by(ChatMessage.room_id)
-    )
-    total_counts = {row[0]: row[1] for row in total_result.all()}
-
-    # 批量查询：每个房间的已读消息数
-    read_result = await db.execute(
-        select(
-            ChatMessage.room_id,
-            func.count(ChatMessageRead.id).label("cnt"),
-        )
-        .select_from(ChatMessageRead)
-        .join(ChatMessage, ChatMessageRead.message_id == ChatMessage.id)
-        .where(
-            ChatMessage.room_id.in_(room_ids),
-            ChatMessageRead.user_id == current_user.id,
-        )
-        .group_by(ChatMessage.room_id)
-    )
-    read_counts = {row[0]: row[1] for row in read_result.all()}
+    # 批量查询未读消息数
+    unread_counts = await _batch_unread_counts(db, room_ids, current_user.id)
 
     # Python 中组装结果
     rooms_data = []
     for room in rooms:
         last_msg = last_msgs.get(room.id)
-        total = total_counts.get(room.id, 0)
-        read_count = read_counts.get(room.id, 0)
-        unread = max(0, total - read_count)
+        unread = unread_counts.get(room.id, 0)
 
         rooms_data.append({
             "id": room.id,
@@ -505,38 +516,10 @@ async def get_unread_summary(
     if not data.room_ids:
         return {}
 
-    # 批量查询：每个房间的非本人消息总数
-    total_result = await db.execute(
-        select(
-            ChatMessage.room_id,
-            func.count(ChatMessage.id).label("cnt"),
-        )
-        .where(
-            ChatMessage.room_id.in_(data.room_ids),
-            ChatMessage.sender_id != current_user.id,
-        )
-        .group_by(ChatMessage.room_id)
-    )
-    total_counts = {row[0]: row[1] for row in total_result.all()}
-
-    # 批量查询：每个房间的已读消息数
-    read_result = await db.execute(
-        select(
-            ChatMessage.room_id,
-            func.count(ChatMessageRead.id).label("cnt"),
-        )
-        .select_from(ChatMessageRead)
-        .join(ChatMessage, ChatMessageRead.message_id == ChatMessage.id)
-        .where(
-            ChatMessage.room_id.in_(data.room_ids),
-            ChatMessageRead.user_id == current_user.id,
-        )
-        .group_by(ChatMessage.room_id)
-    )
-    read_counts = {row[0]: row[1] for row in read_result.all()}
+    unread_counts = await _batch_unread_counts(db, data.room_ids, current_user.id)
 
     return {
-        str(room_id): max(0, total_counts.get(room_id, 0) - read_counts.get(room_id, 0))
+        str(room_id): unread_counts.get(room_id, 0)
         for room_id in data.room_ids
     }
 

@@ -52,3 +52,16 @@ export function formatMsgTime(t) {
   const d = toLocal(t)
   return d ? d.format('HH:mm') : ''
 }
+
+/**
+ * 将 UTC 时间戳转为 Date 对象（无时区后缀视为 UTC）。
+ * 用于 SLA 等需要原生 Date 做差值计算的场景。
+ * @param {string} t - ISO datetime string
+ * @returns {Date}
+ */
+export function utcToDate(t) {
+  if (!t) return new Date()
+  return new Date(
+    typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t) ? t + 'Z' : t
+  )
+}

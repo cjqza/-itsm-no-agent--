@@ -75,19 +75,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - 允许三个前端访问
+# CORS - 从配置读取允许的前端域名
+_cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+# 自动补充 127.0.0.1 变体（如果只配了 localhost）
+_extra = []
+for origin in _cors_origins:
+    if "localhost" in origin:
+        _extra.append(origin.replace("localhost", "127.0.0.1"))
+_cors_origins.extend(_extra)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",   # 用户端
-        "http://localhost:5174",   # 客服端
-        "http://localhost:5175",   # 后台管理
-        "http://localhost:5176",   # OPS统计
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-        "http://127.0.0.1:5175",
-        "http://127.0.0.1:5176",
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

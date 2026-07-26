@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # Security
     TRUST_PROXY: bool = False  # 是否信任 X-Forwarded-For 头（生产环境反向代理后设为 True）
 
+    # CORS
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176"
+
     # SLA Default (hours)
     DEFAULT_SLA_HOURS: int = 4
     SLA_WARNING_PERCENT: int = 50  # 超过50%变红色

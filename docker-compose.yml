@@ -7,9 +7,16 @@ services:
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/logs:/app/logs
+      - ./backend/it_ops.db:/app/it_ops.db
     environment:
       - DB_TYPE=sqlite
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/auth/captcha"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   frontend-client:
     build:
@@ -19,6 +26,7 @@ services:
       - "5173:80"
     depends_on:
       - backend
+    restart: unless-stopped
 
   frontend-agent:
     build:
@@ -28,6 +36,7 @@ services:
       - "5174:80"
     depends_on:
       - backend
+    restart: unless-stopped
 
   frontend:
     build:
@@ -37,6 +46,7 @@ services:
       - "5175:80"
     depends_on:
       - backend
+    restart: unless-stopped
 
   frontend-ops:
     build:
@@ -46,3 +56,4 @@ services:
       - "5176:80"
     depends_on:
       - backend
+    restart: unless-stopped

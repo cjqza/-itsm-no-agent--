@@ -245,8 +245,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ticketApi, chatApi, adminApi, classificationApi } from '@/api'
 import { ElMessage } from 'element-plus'
-import { priorityType, slaColor, slaText, slaTagType, slaColorByPercent } from '@shared/utils/status'
-import { formatTime } from '@shared/utils/format'
+import { priorityType, slaColorByPercent } from '@shared/utils/status'
+import { formatTime, utcToDate } from '@shared/utils/format'
 import { useWebSocket } from '@shared/composables/useWebSocket'
 
 const router = useRouter()
@@ -362,22 +362,16 @@ const lifecycleSteps = computed(() => {
   }))
 })
 
-// 将后端UTC时间戳转为Date对象（无时区后缀视为UTC）
-function utcDate(t) {
-  if (!t) return new Date()
-  return new Date(typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t) ? t + 'Z' : t)
-}
-
 const slaPercent = computed(() => {
   if (!ticket.value.sla_deadline || !ticket.value.created_at) return 0
-  const total = utcDate(ticket.value.sla_deadline) - utcDate(ticket.value.created_at)
-  const elapsed = now.value - utcDate(ticket.value.created_at)
+  const total = utcToDate(ticket.value.sla_deadline) - utcToDate(ticket.value.created_at)
+  const elapsed = now.value - utcToDate(ticket.value.created_at)
   return Math.min(100, Math.round(elapsed / total * 100))
 })
 
 const slaRemaining = computed(() => {
   if (!ticket.value.sla_deadline) return '-'
-  const remaining = utcDate(ticket.value.sla_deadline) - now.value
+  const remaining = utcToDate(ticket.value.sla_deadline) - now.value
   if (remaining <= 0) return '已超时'
   const hours = Math.floor(remaining / 3600000)
   const minutes = Math.floor((remaining % 3600000) / 60000)

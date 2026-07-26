@@ -160,7 +160,7 @@ import { useUserStore } from '@/store/user'
 import { ticketApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import { slaColor, statusTagType, statusText, slaColorByPercent } from '@shared/utils/status'
-import { formatShortTime as formatTime } from '@shared/utils/format'
+import { formatShortTime as formatTime, utcToDate } from '@shared/utils/format'
 
 const router = useRouter()
 const store = useUserStore()
@@ -237,23 +237,17 @@ onMounted(() => {
 })
 onUnmounted(() => { if (unsubWs) unsubWs() })
 
-// 将后端UTC时间戳转为Date对象（无时区后缀视为UTC）
-function utcDate(t) {
-  if (!t) return new Date()
-  return new Date(typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t) ? t + 'Z' : t)
-}
-
 function getSlaPercent(t) {
   if (!t.sla_deadline || !t.created_at) return 0
   // SLA暂停时，用暂停前的进度
   if (t.is_sla_paused && t.sla_paused_at) {
-    const total = utcDate(t.sla_deadline) - utcDate(t.created_at)
-    const pausedElapsed = utcDate(t.sla_paused_at) - utcDate(t.created_at)
+    const total = utcToDate(t.sla_deadline) - utcToDate(t.created_at)
+    const pausedElapsed = utcToDate(t.sla_paused_at) - utcToDate(t.created_at)
     const pausedSeconds = t.sla_paused_seconds || 0
     return Math.min(100, Math.round((pausedElapsed - pausedSeconds * 1000) / total * 100))
   }
-  const total = utcDate(t.sla_deadline) - utcDate(t.created_at)
-  const elapsed = now.value - utcDate(t.created_at)
+  const total = utcToDate(t.sla_deadline) - utcToDate(t.created_at)
+  const elapsed = now.value - utcToDate(t.created_at)
   const pausedSeconds = t.sla_paused_seconds || 0
   return Math.min(200, Math.round((elapsed - pausedSeconds * 1000) / total * 100))
 }
