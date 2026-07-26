@@ -61,7 +61,7 @@ docker-compose up -d
 ### Backend (`backend/`)
 
 - **Framework**: FastAPI with async SQLAlchemy (aiosqlite for dev, aiomysql for prod)
-- **Auth**: JWT tokens + bcrypt password hashing + CAPTCHA (always required) + account locking + IP fail limit
+- **Auth**: JWT tokens + bcrypt password hashing + CAPTCHA + account locking + IP fail limit
 - **Config**: `app/config.py` — Pydantic Settings, reads `.env`, cached via `@lru_cache`
 - **Database**: `app/database.py` — `get_db()` dependency yields a session. **No auto-commit** — all endpoints must explicitly `await db.commit()`.
 - **API routes**: `app/api/` — `auth.py`, `itsm.py`, `chat.py`, `admin.py`, `ops.py`, `upload.py`, `templates.py`, `captcha.py`
@@ -77,12 +77,12 @@ Four frontends share common code via `@shared/` alias (configured in each `vite.
 
 | Module | Purpose |
 |--------|---------|
-| `shared/utils/status.js` | `statusType`, `statusText`, `priorityType`, `slaColor`, `slaText`, `slaTagType` |
-| `shared/utils/format.js` | `formatTime`, `formatShortTime`, `formatMsgTime` |
+| `shared/utils/status.js` | `statusType`, `statusText`, `priorityType`, `slaColor`, `slaText`, `slaTagType`, `slaColorByPercent` |
+| `shared/utils/format.js` | `formatTime`, `formatShortTime`, `formatMsgTime`, `utcToDate` |
 | `shared/api/request.js` | `createApiClient()` — axios instance with token injection + 401/403/error handling |
 | `shared/stores/user.js` | `createBaseStore(authApi)` — base Pinia store for login/logout/fetchMe |
 | `shared/composables/useWebSocket.js` | WS connection + heartbeat + exponential backoff reconnect |
-| `shared/components/BaseLogin.vue` | Configurable login component (props: title/color/showRegister/showForgotPassword) |
+| `shared/components/BaseLogin.vue` | Configurable login component (props: title/color/showRegister/showForgotPassword/captchaApi) |
 | `shared/components/ChatMessage.vue` | Chat message renderer (system/text/image/file, mine/other bubbles) |
 | `shared/components/ChatInput.vue` | Chat input area with file upload |
 
@@ -117,7 +117,7 @@ pending → accepted → processing → resolved_pending_review → resolved
 
 **状态流转验证**: `VALID_TRANSITIONS` dict in `ticket_service.py` enforces legal transitions only.
 
-SLA color coding: green (normal) → yellow (30%+) → red (50%+) → black (overdue)
+SLA color coding: green (normal) → yellow (50%+) → red (80%+) → black (overdue). SLA paused/resumed via dedicated endpoints.
 
 ## Authentication System
 
@@ -133,18 +133,19 @@ SLA color coding: green (normal) → yellow (30%+) → red (50%+) → black (ove
 - Auto-creates user with ACTIVE status + auto-generates login_id (U00001 format)
 - Returns token immediately (register = login)
 
-### Unlock Account
-- `PUT /api/admin/users/{id}/unlock` — admin_access required, resets fail count and lock
-
 ### Forgot Password
 - `POST /api/auth/reset-password` — `{name, phone, captcha_id, captcha_text, new_password}`
 - Validates: CAPTCHA → name+phone match → new password ≠ old password
 - Reserved `sms_code` field for future SMS integration
 
+### Unlock Account
+- `PUT /api/admin/users/{id}/unlock` — admin_access required, resets fail count and lock
+
 ### Permission Model
 - Three flags: `itsm_access`, `ops_access`, `admin_access`
 - `admin_access` can only be modified by `super_admin` (others get 403)
 - `require_permission("field")` dependency in `app/utils/auth.py` with 60s Redis/memory cache
+- `has_permission(user, field)` helper for inline permission checks (reuses cache)
 - Admins and super_admins auto-grant all permissions
 
 ### Admin User Management
@@ -201,6 +202,8 @@ All logins require CAPTCHA. In tests, use `X-Test-Mode: true` header to bypass.
 
 **Vue component errors**: If a page shows "页面出现异常，请刷新重试", check for missing icon imports (`@element-plus/icons-vue`) or uncaught async errors in `openXxxDialog` functions (add try-catch).
 
+**UTC vs local time**: Backend stores UTC timestamps without timezone suffix. Frontend `shared/utils/format.js` uses `dayjs.utc(t).local()` to convert. Dashboard/TicketDetail use `utcToDate()` helper for SLA calculations.
+
 **Test pass rate: 73/73 (100%)**. All tests must pass before committing.
 
 ## Environment Variables
@@ -209,4 +212,5 @@ Copy `backend/.env.example` to `backend/.env`. Key vars:
 - `DB_TYPE`: `sqlite` (default) or `mysql`
 - `JWT_SECRET_KEY`: Change in production
 - `REDIS_URL`: Redis connection (empty = use in-memory fallback)
-- `FEISHU_APP_ID/SECRET`: For feishu integration (currently removed from active code)
+- `TRUST_PROXY`: `false` (default) — set to `true` behind reverse proxy to trust X-Forwarded-For
+- `CORS_ORIGINS`: Comma-separated allowed origins (default: localhost ports)
