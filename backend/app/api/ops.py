@@ -239,18 +239,28 @@ async def sla_compliance(
 @router.get("/statistics/trend")
 async def statistics_trend(
     days: Optional[int] = Query(None, ge=1, le=365),
+    start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
     current_user: User = Depends(require_permission("ops_access")),
     db: AsyncSession = Depends(get_db),
 ):
     """趋势分析（按天）"""
-    since = datetime.now(timezone.utc) - timedelta(days=days) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
+    if start_date and end_date:
+        since = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        until = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+    elif days:
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+        until = datetime.now(timezone.utc)
+    else:
+        since = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        until = datetime.now(timezone.utc)
 
     result = await db.execute(
         select(
             func.date(Ticket.created_at).label("date"),
             func.count().label("count"),
         )
-        .where(Ticket.created_at >= since)
+        .where(Ticket.created_at >= since, Ticket.created_at <= until)
         .group_by(func.date(Ticket.created_at))
         .order_by(func.date(Ticket.created_at))
     )

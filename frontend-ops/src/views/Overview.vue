@@ -3,11 +3,22 @@
     <div class="page-header">
       <h2>OPS 总览</h2>
       <div class="header-actions">
-        <el-select v-model="days" style="width: 120px" @change="loadData" size="default" clearable placeholder="全部">
+        <el-select v-model="days" style="width: 120px" @change="onDaysChange" size="default" clearable placeholder="全部">
           <el-option :value="7" label="最近7天" />
           <el-option :value="30" label="最近30天" />
           <el-option :value="90" label="最近90天" />
         </el-select>
+        <el-date-picker
+          v-model="dateRange"
+          type="daterange"
+          range-separator="至"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          size="default"
+          style="width: 260px"
+          @change="onDateRangeChange"
+          :disabled="!!days"
+        />
         <el-button type="primary" plain @click="handleExport">
           <el-icon><Download /></el-icon> 导出报表
         </el-button>
@@ -126,6 +137,7 @@ import { ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 
 const days = ref(30)
+const dateRange = ref(null)  // [Date, Date] 日期范围
 const overview = ref({})
 const loading = ref(false)
 const trendChart = ref(null)
@@ -149,13 +161,40 @@ onUnmounted(() => {
   ratingInstance?.dispose()
 })
 
+// 选择天数时清除日期范围
+function onDaysChange() {
+  dateRange.value = null
+  loadData()
+}
+
+// 选择日期范围时清除天数
+function onDateRangeChange() {
+  days.value = null
+  loadData()
+}
+
+// 将 Date 对象转为 YYYY-MM-DD
+function fmtDate(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dd}`
+}
+
 async function loadData() {
   loading.value = true
   try {
     const d = days.value || null
+    // 趋势图支持日期范围筛选
+    const trendParams = d
+      ? { days: d }
+      : dateRange.value
+        ? { start_date: fmtDate(dateRange.value[0]), end_date: fmtDate(dateRange.value[1]) }
+        : {}
+
     const [ov, trend, statusDist, catStats, ratingDist] = await Promise.all([
       opsApi.getOverview(d),
-      opsApi.getTrend(d),
+      opsApi.getTrend(trendParams),
       opsApi.getStatusDistribution(d),
       opsApi.getCategoryStats(d),
       opsApi.getRatingDistribution(d),
