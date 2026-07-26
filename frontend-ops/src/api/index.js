@@ -12,7 +12,7 @@ export const opsApi = {
   getOverview: (days = null) => api.get('/ops/statistics/overview', { params: days ? { days } : {} }),
   getByCategory: (days = null) => api.get('/ops/statistics/by-category', { params: days ? { days } : {} }),
   getByAgent: (days = null) => api.get('/ops/statistics/by-agent', { params: days ? { days } : {} }),
-  getRatings: (days = null) => api.get('/ops/statistics/ratings', { params: days ? { days } : {} }),
+  getRatings: (params = {}) => api.get('/ops/statistics/ratings', { params }),
   getSlaCompliance: (days = null) => api.get('/ops/statistics/sla-compliance', { params: days ? { days } : {} }),
   getTrend: (params = {}) => api.get('/ops/statistics/trend', { params }),
   getStatusDistribution: (days = null) => api.get('/ops/status-distribution', { params: days ? { days } : {} }),
