@@ -2,6 +2,13 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-26] 代码优化 13 项 — 代码卫生与架构改进
+- **变更**：13 项集中代码优化，11 个文件变更，+48 / -80。(1) `websocket.py` 将 `print` 改为 `logger.debug`，统一日志输出。(2) `admin.py` 删除重复的 `datetime` import。(3) `auth.py` 的 `_ip_fail_store` 在清理时删除空 key，避免内存泄漏。(4) `itsm.py` 的 `get_ticket` 错误信息脱敏，不暴露内部 ID 格式。(5) `ticket_service.py` 的 `safe_rel_name` 添加 debug 日志，便于排查关系加载异常。(6) `admin.py` 的 `list_permissions` keyword 条件去重，避免重复 SQL 条件。(7) `itsm.py` 6 处函数内 lazy import 移至文件顶部，规范导入顺序。(8) `ops.py` 移除冗余字段覆盖逻辑。(9) `chat.py` 的 `ChatMessageRead` 模型添加复合索引，提升已读状态查询性能。(10) `config.py` + `sla_service.py` 将 SLA 阈值从硬编码改为配置项，支持通过环境变量调整。(11) `admin.py` 提取 `_get_user_or_404` 辅助函数，消除 3 处重复的用户查询+404 处理。(12) `AgentChat.vue` 用 shared `formatTime` 替换本地时间格式化函数，消除重复代码。(13) `user.py` + `admin.py` 的 `is_online` 字段从 Integer 改为 Boolean，语义更清晰。
+- **原因**：项目积累了多处代码卫生问题——调试 print 残留、重复 import、空 key 内存泄漏、错误信息泄露内部细节、硬编码阈值、冗余字段覆盖、类型语义不准确等，集中修复可提升代码质量与可维护性。
+- **影响**：`backend/app/utils/websocket.py`（日志规范化）；`backend/app/api/admin.py`（去重 import + keyword 去重 + _get_user_or_404 提取 + is_online Boolean）；`backend/app/api/auth.py`（空 key 清理）；`backend/app/api/itsm.py`（错误脱敏 + lazy import 顶部化）；`backend/app/api/ops.py`（移除冗余覆盖）；`backend/app/config.py`（SLA 阈值配置项）；`backend/app/models/chat.py`（复合索引）；`backend/app/models/user.py`（is_online Boolean）；`backend/app/services/sla_service.py`（SLA 阈值配置化）；`backend/app/services/ticket_service.py`（debug 日志）；`frontend-agent/src/views/AgentChat.vue`（复用 shared formatTime）。纯重构，无新增功能，73/73 测试全过。
+- **提交**：`9e59058`
+- **测试**：73/73 全部通过。
+
 ## [2026-07-26] 代码优化 TOP6-10 — 重复代码消除 + 配置外部化 + Docker增强 + 共享工具函数
 - **变更**：(1) `chat.py` 提取 `_batch_unread_counts()` 辅助函数，`get_my_rooms` 和 `get_unread_summary` 两处相同的未读消息批量计算逻辑统一调用，消除约 60 行重复查询代码。(2) `config.py` 新增 `CORS_ORIGINS` 配置项，`main.py` 中硬编码的 8 个 CORS origin 改为从配置读取并自动补充 `127.0.0.1` 变体，新增前端域名无需改代码。(3) `docker-compose.yml` 新增 SQLite 数据文件卷挂载（`it_ops.db`）、backend 健康检查（`/api/auth/captcha`，30s 间隔）、所有前端服务添加 `restart: unless-stopped`。(4) `Dashboard.vue` 和 `TicketDetail.vue` 中各有一份相同的 `utcDate()` 函数，统一迁移到 `shared/utils/format.js` 新增的 `utcToDate()` 导出函数，两处组件改为 import 引用。(5) `shared/utils/format.js` 新增 `utcToDate(t)` 工具函数，将无时区后缀的 ISO 字符串视为 UTC 并转为 Date 对象。7 个文件变更，+92 / -95。
 - **原因**：`chat.py` 中未读消息数计算逻辑在两个端点完全重复，修改时需同步两处容易遗漏；CORS 域名硬编码在 `main.py` 中，部署新环境需改代码；Docker 缺少数据持久化和健康检查，容器崩溃无自动恢复；`utcDate()` 函数在 Dashboard 和 TicketDetail 中各有一份相同实现。
