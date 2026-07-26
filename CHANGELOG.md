@@ -2,6 +2,13 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-26] 代码优化 TOP5 — BUG修复与重复代码消除
+- **变更**：(1) 修复 `chat.py` websocket_chat 中 `ws_user` 变量未定义的 BUG，增加防御性初始化。(2) `ops.py` 提取 `_since_date()` 辅助函数，消除 7 处重复的时间计算逻辑。(3) `ops.py` list_tickets 查询条件提取为公共 `conditions` 列表，data 和 count 查询共享同一份条件，消除重复筛选代码。(4) `chat.py` 将 `datetime` 导入移至文件顶部，删除 2 处函数内联导入。(5) `shared/utils/status.js` 新增 `slaColorByPercent()` 函数，`Dashboard.vue` 和 `TicketDetail.vue` 统一引用，消除两处相同的 SLA 颜色计算函数。5 个文件变更，+51 / -60。
+- **原因**：代码存在一处潜在 BUG（ws_user 未定义可能导致 NameError）和大量重复逻辑，影响可维护性和健壮性；提取公共函数可减少修改时的遗漏风险。
+- **影响**：`backend/app/api/chat.py`（BUG 修复 + 导入整理）；`backend/app/api/ops.py`（提取辅助函数 + 查询条件重构）；`frontend-agent/src/views/Dashboard.vue`（引用共享 SLA 颜色函数）；`frontend-agent/src/views/TicketDetail.vue`（同上）；`shared/utils/status.js`（新增 slaColorByPercent）。纯重构，无新增功能。
+- **提交**：`870d1cb`
+- **测试**：73/73 全部通过。
+
 ## [2026-07-26] ITSM 工单实时更新修复：创建工单后自动通知客服端刷新
 - **变更**：(1) 后端 `main.py` 新增全局通知 WebSocket 端点 `/ws`（JWT 认证 + 心跳 + 连接数限制），限流中间件跳过 `/ws` 路径。(2) 后端 `itsm.py` 的 `create_ticket` 成功后广播 `new_ticket` 事件给所有已连接的客服。(3) 前端 `frontend-agent/src/store/user.js` 新增全局 WS 连接管理（`onWsMessage` 回调机制）。(4) `Dashboard.vue` 监听 `new_ticket`/`ticket_update` 事件自动刷新看板数据。(5) `TicketList.vue` 同样监听并自动刷新工单列表。5 个文件变更，+111 / -3。
 - **原因**：工单创建后客服端需要手动刷新才能看到新工单，实时性差；新增全局 WebSocket 通知机制，客服端无需轮询即可实时感知新工单和状态变更。
