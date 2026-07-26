@@ -24,6 +24,14 @@ export const useUserStore = defineStore('user', () => {
     return data
   }
 
+  // Wrap fetchMe to also connect global WS (页面刷新/恢复登录态时)
+  async function fetchMe() {
+    await base.fetchMe()
+    if (base.isLoggedIn.value) {
+      connectWebSocket()
+    }
+  }
+
   // Wrap logout to also disconnect global WS
   function logout() {
     wsDisconnect()
@@ -45,6 +53,7 @@ export const useUserStore = defineStore('user', () => {
     ...base,
     login,
     logout,
+    fetchMe,
     hasItsm,
     connectWebSocket,
     onWsMessage,
