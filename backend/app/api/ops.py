@@ -427,9 +427,6 @@ async def list_tickets(
     items = []
     for t in tickets:
         d = ticket_service._ticket_to_dict(t)
-        d["category_name"] = t.category.name if t.category else None
-        d["creator_name"] = t.creator.name if t.creator else None
-        d["assignee_name"] = t.assignee.name if t.assignee else None
         items.append(d)
 
     return {"items": items, "total": total, "page": page, "page_size": page_size}

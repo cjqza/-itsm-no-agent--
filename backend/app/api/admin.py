@@ -24,6 +24,15 @@ from app.utils import escape_like
 router = APIRouter(prefix="/api/admin", tags=["后台管理"])
 
 
+async def _get_user_or_404(db: AsyncSession, user_id: int) -> User:
+    """获取用户，不存在则抛 404"""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return user
+
+
 # ============ 用户管理 Schemas ============
 
 class UserUpdate(BaseModel):
@@ -136,10 +145,7 @@ async def update_user(
     db: AsyncSession = Depends(get_db),
 ):
     """更新用户信息"""
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    user = await _get_user_or_404(db, user_id)
 
     # 普通管理员不能修改超级管理员的信息
     if user.role == UserRole.SUPER_ADMIN and current_user.role != UserRole.SUPER_ADMIN:
@@ -179,10 +185,7 @@ async def update_user_status(
     db: AsyncSession = Depends(get_db),
 ):
     """启用/禁用用户"""
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    user = await _get_user_or_404(db, user_id)
 
     # 不能禁用自己
     if user.id == current_user.id:
@@ -215,10 +218,7 @@ async def unlock_user(
     db: AsyncSession = Depends(get_db),
 ):
     """手动解锁被锁定的账号"""
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    user = await _get_user_or_404(db, user_id)
 
     if user.login_fail_count == 0 and not user.locked_until:
         raise HTTPException(status_code=400, detail="该账号未被锁定")
@@ -374,25 +374,18 @@ async def list_permissions(
 ):
     """权限列表（分页）"""
     base_query = select(Permission, User).join(User, Permission.user_id == User.id)
-    if keyword:
-        safe_kw = escape_like(keyword)
-        base_query = base_query.where(
-            (User.name.like(f"%{safe_kw}%", escape="\\")) |
-            (User.email.like(f"%{safe_kw}%", escape="\\")) |
-            (User.login_id.like(f"%{safe_kw}%", escape="\\")) |
-            (User.phone.like(f"%{safe_kw}%", escape="\\"))
-        )
-
-    # 计数
     count_query = select(func.count(Permission.id)).join(User, Permission.user_id == User.id)
+
     if keyword:
         safe_kw = escape_like(keyword)
-        count_query = count_query.where(
+        keyword_condition = (
             (User.name.like(f"%{safe_kw}%", escape="\\")) |
             (User.email.like(f"%{safe_kw}%", escape="\\")) |
             (User.login_id.like(f"%{safe_kw}%", escape="\\")) |
             (User.phone.like(f"%{safe_kw}%", escape="\\"))
         )
+        base_query = base_query.where(keyword_condition)
+        count_query = count_query.where(keyword_condition)
     count_result = await db.execute(count_query)
     total = count_result.scalar() or 0
 
@@ -432,10 +425,7 @@ async def update_permission(
 ):
     """更新用户权限"""
     # 检查目标用户是否存在
-    user_result = await db.execute(select(User).where(User.id == user_id))
-    target_user = user_result.scalar_one_or_none()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    target_user = await _get_user_or_404(db, user_id)
 
     # 管理员和超级管理员的权限不可修改
     if target_user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
@@ -555,7 +545,6 @@ async def review_permission_request(
 
     req.status = action
     req.reviewed_by = current_user.id
-    from datetime import datetime, timezone
     req.reviewed_at = datetime.now(timezone.utc)
 
     # 如果批准，自动开通权限
@@ -630,10 +619,7 @@ async def review_account_request(
     if action not in ("approve", "reject"):
         raise HTTPException(status_code=400, detail="action 必须为 approve 或 reject")
 
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    user = await _get_user_or_404(db, user_id)
 
     if user.status != UserStatus.PENDING:
         raise HTTPException(status_code=400, detail="该账号不在待审批状态")
@@ -857,10 +843,7 @@ async def upgrade_to_agent(
     db: AsyncSession = Depends(get_db),
 ):
     """将已有用户升级为客服"""
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    user = await _get_user_or_404(db, user_id)
 
     if user.role == UserRole.AGENT:
         raise HTTPException(status_code=400, detail="该用户已是客服")
@@ -870,7 +853,7 @@ async def upgrade_to_agent(
 
     # 升级为客服
     user.role = UserRole.AGENT
-    user.is_online = 1
+    user.is_online = True
     user.updated_at = datetime.now(timezone.utc)
 
     # 确保有权限记录
@@ -910,17 +893,14 @@ async def downgrade_to_user(
     db: AsyncSession = Depends(get_db),
 ):
     """将客服降级为普通用户"""
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    user = await _get_user_or_404(db, user_id)
 
     if user.role != UserRole.AGENT:
         raise HTTPException(status_code=400, detail="该用户不是客服")
 
     # 降级为普通用户
     user.role = UserRole.USER
-    user.is_online = 0
+    user.is_online = False
     user.updated_at = datetime.now(timezone.utc)
 
     # 移除 itsm/ops 权限
@@ -1017,10 +997,7 @@ async def update_agent(
     db: AsyncSession = Depends(get_db),
 ):
     """更新客服信息"""
-    result = await db.execute(select(User).where(User.id == user_id))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    agent = await _get_user_or_404(db, user_id)
     if agent.role != UserRole.AGENT:
         raise HTTPException(status_code=400, detail="只能修改客服角色的用户")
 
@@ -1050,10 +1027,7 @@ async def delete_agent(
     db: AsyncSession = Depends(get_db),
 ):
     """禁用客服（软删除）"""
-    result = await db.execute(select(User).where(User.id == user_id))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    agent = await _get_user_or_404(db, user_id)
     if agent.role == UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=400, detail="不能禁用超级管理员")
     if agent.role != UserRole.AGENT:

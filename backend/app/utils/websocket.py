@@ -85,18 +85,18 @@ class ConnectionManager:
         """通知新工单"""
         msg = {"type": "new_ticket", "data": ticket_data}
         user_ids = list(self._connections.keys())
-        print(f"[WS-DEBUG] notify_new_ticket: user_ids={user_ids}, total_connections={self.total_connections}", flush=True)
+        logger.debug(f"notify_new_ticket: user_ids={user_ids}, total_connections={self.total_connections}")
         if not user_ids:
-            print("[WS-DEBUG] 无在线用户，跳过广播", flush=True)
+            logger.debug("无在线用户，跳过广播")
             return
         for uid in user_ids:
             conns = self._connections.get(uid, set())
             for ws in list(conns):
                 try:
                     await ws.send_json(msg)
-                    print(f"[WS-DEBUG] 发送成功: user_id={uid}", flush=True)
+                    logger.debug(f"发送成功: user_id={uid}")
                 except Exception as e:
-                    print(f"[WS-DEBUG] 发送失败: user_id={uid}, error={e}", flush=True)
+                    logger.debug(f"发送失败: user_id={uid}, error={e}")
                     conns.discard(ws)
 
     @property

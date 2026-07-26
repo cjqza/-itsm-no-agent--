@@ -42,6 +42,11 @@ def _check_ip_fail_limit(client_ip: str) -> bool:
         t for t in _ip_fail_store[client_ip] if now - t < IP_FAIL_WINDOW
     ]
 
+    # 过期记录清理完后如果为空，删除 key 防止内存泄漏
+    if not _ip_fail_store[client_ip]:
+        del _ip_fail_store[client_ip]
+        return True
+
     if len(_ip_fail_store[client_ip]) >= IP_FAIL_LIMIT:
         return False
 

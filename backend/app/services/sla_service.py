@@ -67,11 +67,11 @@ class SLAService:
             if ticket.created_at:
                 created_at = self._ensure_utc(ticket.created_at)
                 elapsed_minutes = (now - created_at).total_seconds() / 60
-                if elapsed_minutes >= 30:
+                if elapsed_minutes >= settings.PENDING_SLA_BLACK_MINUTES:
                     return SLAStatus.BLACK
-                if elapsed_minutes >= 20:
+                if elapsed_minutes >= settings.PENDING_SLA_RED_MINUTES:
                     return SLAStatus.RED
-                if elapsed_minutes >= 10:
+                if elapsed_minutes >= settings.PENDING_SLA_YELLOW_MINUTES:
                     return SLAStatus.YELLOW
             return SLAStatus.GREEN
 

@@ -17,6 +17,7 @@ from app.schemas.ticket import (
 from app.utils.auth import get_current_user, require_permission, has_permission
 from app.services.ticket_service import ticket_service
 from app.services.sla_service import sla_service
+from app.models.category import Category, BusinessModule, Property, Symptom, Cause, Solution
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,6 @@ async def list_categories_public(
     db: AsyncSession = Depends(get_db),
 ):
     """公开的分类列表（无需 admin 权限，任何登录用户可访问）"""
-    from app.models.category import Category
     result = await db.execute(select(Category).order_by(Category.sort_order))
     categories = result.scalars().all()
     return [
@@ -50,7 +50,6 @@ async def list_business_modules(
     db: AsyncSession = Depends(get_db),
 ):
     """业务模块列表（按管理单元筛选）"""
-    from app.models.category import BusinessModule
     query = select(BusinessModule)
     if category_id:
         query = query.where(BusinessModule.category_id == category_id)
@@ -65,7 +64,6 @@ async def list_properties(
     db: AsyncSession = Depends(get_db),
 ):
     """性质列表"""
-    from app.models.category import Property
     result = await db.execute(select(Property).order_by(Property.id))
     return [{"id": p.id, "name": p.name} for p in result.scalars().all()]
 
@@ -77,7 +75,6 @@ async def list_symptoms(
     db: AsyncSession = Depends(get_db),
 ):
     """症状列表（按业务模块筛选）"""
-    from app.models.category import Symptom
     query = select(Symptom)
     if business_module_id:
         query = query.where(Symptom.business_module_id == business_module_id)
@@ -93,7 +90,6 @@ async def list_causes(
     db: AsyncSession = Depends(get_db),
 ):
     """原因列表（按业务模块筛选）"""
-    from app.models.category import Cause
     query = select(Cause)
     if business_module_id:
         query = query.where(Cause.business_module_id == business_module_id)
@@ -109,7 +105,6 @@ async def list_solutions(
     db: AsyncSession = Depends(get_db),
 ):
     """解决方法列表（按业务模块筛选）"""
-    from app.models.category import Solution
     query = select(Solution)
     if business_module_id:
         query = query.where(Solution.business_module_id == business_module_id)
@@ -303,7 +298,7 @@ async def get_ticket(
         raise
     except Exception as e:
         logger.error(f"get_ticket error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取工单失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取工单失败，请稍后重试")
 
 
 @router.put("/tickets/{ticket_id}")

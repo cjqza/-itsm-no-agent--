@@ -448,6 +448,7 @@ class TicketService:
                     return obj.name if obj else None
                 return None
             except Exception:
+                logger.debug(f"safe_rel_name({rel_name}) failed")
                 return None
 
         return {

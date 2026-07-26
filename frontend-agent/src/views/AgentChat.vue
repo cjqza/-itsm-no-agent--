@@ -93,10 +93,10 @@ import { ticketApi, chatApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import { ChatDotRound } from '@element-plus/icons-vue'
 import { statusTagType, statusText } from '@shared/utils/status'
+import { formatTime } from '@shared/utils/format'
 import { useWebSocket } from '@shared/composables/useWebSocket'
 import ChatMessage from '@shared/components/ChatMessage.vue'
 import ChatInput from '@shared/components/ChatInput.vue'
-import dayjs from 'dayjs'
 
 const router = useRouter()
 const store = useUserStore()
@@ -216,15 +216,6 @@ function scrollToBottom() {
       messagesRef.value.scrollTop = messagesRef.value.scrollHeight
     }
   })
-}
-
-function formatTime(t) {
-  if (!t) return ''
-  const d = dayjs(t)
-  const now = dayjs()
-  if (d.isSame(now, 'day')) return d.format('HH:mm')
-  if (d.isSame(now.subtract(1, 'day'), 'day')) return '昨天'
-  return d.format('MM-DD')
 }
 
 function statusColor(s) {

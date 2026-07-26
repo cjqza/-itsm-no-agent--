@@ -1,5 +1,5 @@
 """聊天模型 - 内置聊天系统"""
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum as SQLEnum, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import enum
@@ -58,6 +58,8 @@ class ChatMessageRead(Base):
     message_id = Column(Integer, ForeignKey("chat_messages.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     read_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (Index('ix_chat_message_reads_msg_user', 'message_id', 'user_id'),)
 
     # Relationships
     message = relationship("ChatMessage", back_populates="read_records")

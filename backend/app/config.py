@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     DEFAULT_SLA_HOURS: int = 4
     SLA_WARNING_PERCENT: int = 50  # 超过50%变红色
     ACCEPT_TIMEOUT_MINUTES: int = 5  # 5分钟未接单超时
+    PENDING_SLA_YELLOW_MINUTES: int = 10  # 待接单SLA变黄（分钟）
+    PENDING_SLA_RED_MINUTES: int = 20     # 待接单SLA变红（分钟）
+    PENDING_SLA_BLACK_MINUTES: int = 30   # 待接单SLA超时（分钟）
 
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
