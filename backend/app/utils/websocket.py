@@ -41,11 +41,17 @@ class ConnectionManager:
         """发送消息给指定用户的所有连接"""
         connections = self._connections.get(user_id, set())
         if not connections:
+            logger.warning(f"[WS] 用户 {user_id} 无连接, 跳过发送")
             return
+        logger.info(f"[WS] 发送消息给用户 {user_id}, 连接数: {len(connections)}")
         results = await asyncio.gather(
             *[ws.send_json(message) for ws in connections],
             return_exceptions=True,
         )
+        # 记录失败的发送
+        for ws, r in zip(connections, results):
+            if isinstance(r, Exception):
+                logger.warning(f"[WS] 发送失败给用户 {user_id}: {r}")
         # 清理断开的连接
         dead = {ws for ws, r in zip(connections, results) if isinstance(r, Exception)}
         for ws in dead:
@@ -53,10 +59,15 @@ class ConnectionManager:
 
     async def broadcast(self, message: dict):
         """广播消息给所有连接的用户"""
-        await asyncio.gather(
-            *[self.send_to_user(uid, message) for uid in list(self._connections.keys())],
-            return_exceptions=True,
-        )
+        user_ids = list(self._connections.keys())
+        logger.info(f"[WS] broadcast 开始: 用户数={len(user_ids)}, ids={user_ids}, msg_type={message.get('type')}")
+        if not user_ids:
+            logger.warning("[WS] broadcast: 无在线用户，跳过")
+            return
+        tasks = [self.send_to_user(uid, message) for uid in user_ids]
+        logger.info(f"[WS] broadcast: 准备发送 {len(tasks)} 个任务")
+        await asyncio.gather(*tasks, return_exceptions=True)
+        logger.info("[WS] broadcast 完成")
 
     async def notify_ticket_update(self, ticket_data: dict, target_user_ids: list = None):
         """通知工单更新"""
@@ -72,10 +83,21 @@ class ConnectionManager:
 
     async def notify_new_ticket(self, ticket_data: dict):
         """通知新工单"""
-        await self.broadcast({
-            "type": "new_ticket",
-            "data": ticket_data,
-        })
+        msg = {"type": "new_ticket", "data": ticket_data}
+        user_ids = list(self._connections.keys())
+        print(f"[WS-DEBUG] notify_new_ticket: user_ids={user_ids}, total_connections={self.total_connections}", flush=True)
+        if not user_ids:
+            print("[WS-DEBUG] 无在线用户，跳过广播", flush=True)
+            return
+        for uid in user_ids:
+            conns = self._connections.get(uid, set())
+            for ws in list(conns):
+                try:
+                    await ws.send_json(msg)
+                    print(f"[WS-DEBUG] 发送成功: user_id={uid}", flush=True)
+                except Exception as e:
+                    print(f"[WS-DEBUG] 发送失败: user_id={uid}, error={e}", flush=True)
+                    conns.discard(ws)
 
     @property
     def total_connections(self) -> int:

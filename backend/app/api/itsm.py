@@ -190,15 +190,17 @@ async def create_ticket(
     # WebSocket通知：广播新工单给所有客服
     try:
         from app.utils.websocket import ws_manager
+        logger.info(f"[WS] 广播新工单: ticket_id={ticket.id}, 在线用户: {list(ws_manager._connections.keys())}")
         await ws_manager.notify_new_ticket({
             "id": ticket.id,
             "ticket_no": ticket.ticket_no,
             "title": ticket.title,
             "status": ticket.status.value,
-            "priority": ticket.priority.value if ticket.priority else None,
+            "priority": ticket.priority.value if hasattr(ticket.priority, 'value') else (ticket.priority or None),
             "creator_name": current_user.name,
             "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
         })
+        logger.info(f"[WS] 广播完成: ticket_id={ticket.id}")
     except Exception as e:
         logger.warning(f"WebSocket新工单通知失败: {e}")
 

@@ -161,7 +161,8 @@ async function loadData() {
       opsApi.getRatingDistribution(d),
     ])
     overview.value = ov
-    await nextTick()
+    loading.value = false  // 先关闭骨架屏，让图表容器进入 DOM
+    await nextTick()        // 等待 DOM 更新
     renderTrendChart(trend)
     renderStatusChart(statusDist)
     renderCategoryChart(catStats)
