@@ -1,0 +1,12 @@
+
+# AI Models (too large for git)
+backend/models/
+backend/chroma_db/
+backend/test_chroma_db/
+backend/data/faq/
+backend/data/sop/
+backend/logs/
+.env
+*.db
+__pycache__/
+.venv/
