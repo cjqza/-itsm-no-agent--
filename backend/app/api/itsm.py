@@ -186,6 +186,22 @@ async def create_ticket(
         category_id=data.category_id,
     )
     await db.commit()
+
+    # WebSocket通知：广播新工单给所有客服
+    try:
+        from app.utils.websocket import ws_manager
+        await ws_manager.notify_new_ticket({
+            "id": ticket.id,
+            "ticket_no": ticket.ticket_no,
+            "title": ticket.title,
+            "status": ticket.status.value,
+            "priority": ticket.priority.value if ticket.priority else None,
+            "creator_name": current_user.name,
+            "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
+        })
+    except Exception as e:
+        logger.warning(f"WebSocket新工单通知失败: {e}")
+
     return {
         "id": ticket.id,
         "ticket_no": ticket.ticket_no,

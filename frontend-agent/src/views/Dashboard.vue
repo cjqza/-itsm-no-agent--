@@ -226,6 +226,17 @@ onMounted(() => {
 })
 onUnmounted(() => { if (nowTimer) clearInterval(nowTimer) })
 
+// 监听全局WebSocket通知，自动刷新数据
+let unsubWs = null
+onMounted(() => {
+  unsubWs = store.onWsMessage((msg) => {
+    if (msg.type === 'new_ticket' || msg.type === 'ticket_update') {
+      loadData()
+    }
+  })
+})
+onUnmounted(() => { if (unsubWs) unsubWs() })
+
 // 将后端UTC时间戳转为Date对象（无时区后缀视为UTC）
 function utcDate(t) {
   if (!t) return new Date()

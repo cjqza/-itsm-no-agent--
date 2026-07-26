@@ -79,13 +79,15 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useUserStore } from '@/store/user'
 import { ticketApi } from '@/api'
 import { slaColor, statusTagType, statusText } from '@shared/utils/status'
 import { formatTime } from '@shared/utils/format'
 
 const router = useRouter()
+const store = useUserStore()
 const tickets = ref([])
 const loading = ref(false)
 const page = ref(1)
@@ -95,6 +97,17 @@ const keyword = ref('')
 const filters = reactive({ status: '' })
 
 onMounted(() => loadTickets())
+
+// 监听全局WebSocket通知，自动刷新列表
+let unsubWs = null
+onMounted(() => {
+  unsubWs = store.onWsMessage((msg) => {
+    if (msg.type === 'new_ticket' || msg.type === 'ticket_update') {
+      loadTickets()
+    }
+  })
+})
+onUnmounted(() => { if (unsubWs) unsubWs() })
 
 async function loadTickets() {
   loading.value = true

@@ -202,6 +202,8 @@ async def rate_limit_middleware(request: Request, call_next):
         return await call_next(request)
     if path.startswith("/api/chat/ws/"):
         return await call_next(request)
+    if path == "/ws":
+        return await call_next(request)
 
     # 测试模式跳过限流（仅限 localhost）
     if request.headers.get("X-Test-Mode", "").lower() == "true":
@@ -284,6 +286,31 @@ app.include_router(cause_router)
 app.include_router(solution_router)
 app.include_router(upload_router)
 app.include_router(template_router)
+
+
+@app.websocket("/ws")
+async def websocket_notifications(websocket: WebSocket, token: str = ""):
+    """全局通知 WebSocket"""
+    if not token:
+        await websocket.close(code=4001, reason="缺少token")
+        return
+    try:
+        from app.utils.websocket import ws_manager
+        from app.utils.auth import decode_token
+        payload = decode_token(token)
+        user_id = int(payload.get("user_id"))
+    except Exception:
+        await websocket.close(code=4001, reason="token验证失败")
+        return
+
+    await ws_manager.connect(websocket, user_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, user_id)
 
 
 @app.get("/")
