@@ -2,6 +2,13 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-26] 代码优化 TOP6-10 — 重复代码消除 + 配置外部化 + Docker增强 + 共享工具函数
+- **变更**：(1) `chat.py` 提取 `_batch_unread_counts()` 辅助函数，`get_my_rooms` 和 `get_unread_summary` 两处相同的未读消息批量计算逻辑统一调用，消除约 60 行重复查询代码。(2) `config.py` 新增 `CORS_ORIGINS` 配置项，`main.py` 中硬编码的 8 个 CORS origin 改为从配置读取并自动补充 `127.0.0.1` 变体，新增前端域名无需改代码。(3) `docker-compose.yml` 新增 SQLite 数据文件卷挂载（`it_ops.db`）、backend 健康检查（`/api/auth/captcha`，30s 间隔）、所有前端服务添加 `restart: unless-stopped`。(4) `Dashboard.vue` 和 `TicketDetail.vue` 中各有一份相同的 `utcDate()` 函数，统一迁移到 `shared/utils/format.js` 新增的 `utcToDate()` 导出函数，两处组件改为 import 引用。(5) `shared/utils/format.js` 新增 `utcToDate(t)` 工具函数，将无时区后缀的 ISO 字符串视为 UTC 并转为 Date 对象。7 个文件变更，+92 / -95。
+- **原因**：`chat.py` 中未读消息数计算逻辑在两个端点完全重复，修改时需同步两处容易遗漏；CORS 域名硬编码在 `main.py` 中，部署新环境需改代码；Docker 缺少数据持久化和健康检查，容器崩溃无自动恢复；`utcDate()` 函数在 Dashboard 和 TicketDetail 中各有一份相同实现。
+- **影响**：`backend/app/api/chat.py`（提取 `_batch_unread_counts`）；`backend/app/config.py`（新增 `CORS_ORIGINS`）；`backend/app/main.py`（CORS 从配置读取）；`docker-compose.yml`（卷挂载 + 健康检查 + restart 策略）；`frontend-agent/src/views/Dashboard.vue`（改用 `utcToDate`）；`frontend-agent/src/views/TicketDetail.vue`（同上）；`shared/utils/format.js`（新增 `utcToDate`）。纯重构，无新增功能。
+- **提交**：（待提交）
+- **测试**：待确认。
+
 ## [2026-07-26] 代码优化 TOP5 — BUG修复与重复代码消除
 - **变更**：(1) 修复 `chat.py` websocket_chat 中 `ws_user` 变量未定义的 BUG，增加防御性初始化。(2) `ops.py` 提取 `_since_date()` 辅助函数，消除 7 处重复的时间计算逻辑。(3) `ops.py` list_tickets 查询条件提取为公共 `conditions` 列表，data 和 count 查询共享同一份条件，消除重复筛选代码。(4) `chat.py` 将 `datetime` 导入移至文件顶部，删除 2 处函数内联导入。(5) `shared/utils/status.js` 新增 `slaColorByPercent()` 函数，`Dashboard.vue` 和 `TicketDetail.vue` 统一引用，消除两处相同的 SLA 颜色计算函数。5 个文件变更，+51 / -60。
 - **原因**：代码存在一处潜在 BUG（ws_user 未定义可能导致 NameError）和大量重复逻辑，影响可维护性和健壮性；提取公共函数可减少修改时的遗漏风险。
