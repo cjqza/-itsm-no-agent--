@@ -21,6 +21,10 @@ def _parse_thinking(text: str) -> dict:
     Qwen2.5 模型将思考过程以 <think> 标签嵌入普通文本输出（非特殊 token）。
     返回 {"answer": str, "thinking": Optional[str]}。
     """
+    # 清理 LLM 输出中的特殊标签
+    import re
+    text = re.sub(r'<\|[^|]+\|>', '', text).strip()
+
     think_start = text.find("<think>")
     think_end = text.find("</think>")
     if think_start != -1 and think_end != -1 and think_end > think_start:
