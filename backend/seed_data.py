@@ -1,23 +1,21 @@
-"""种子数据 - 初始化系统基础数据"""
+"""种子数据 - 用户、分类体系、历史工单"""
 import asyncio
 from app.database import AsyncSessionLocal, init_db
 from app.models.user import User, UserRole, UserStatus
 from app.models.category import Category, BusinessModule, Property, Symptom, Cause, Solution
 from app.models.permission import Permission
-from app.models.template import Template
 from app.models.ticket import Ticket, TicketStatus, TicketLog, SLAStatus
 from app.utils.ticket_no import generate_ticket_no
 from app.utils.auth import hash_password
 from datetime import datetime, timedelta, timezone
 
 
-# 初始密码（种子账号统一密码，生产环境请修改）
 ADMIN_PASSWORD = "admin123"
 DEFAULT_PASSWORD = "123456"
 
 
 async def seed():
-    """初始化种子数据"""
+    """初始化种子数据（用户 + 历史工单）"""
     await init_db()
 
     async with AsyncSessionLocal() as db:
@@ -46,7 +44,7 @@ async def seed():
         agents = []
         agent_names = ["张三", "李四", "王五", "赵六", "钱七"]
         default_hash = hash_password(DEFAULT_PASSWORD)
-        login_seq = 0  # 专属ID序号（U00001 起）
+        login_seq = 0
         for i, name in enumerate(agent_names):
             login_seq += 1
             agent = User(
@@ -63,7 +61,6 @@ async def seed():
             db.add(agent)
             agents.append(agent)
 
-        # 测试用户
         login_seq += 1
         user1 = User(feishu_user_id="user1", login_id=f"U{login_seq:05d}", password_hash=default_hash,
                      name="刘一", email="user1@company.com", phone="13900010001",
@@ -84,7 +81,7 @@ async def seed():
         db.add(Permission(user_id=user1.id))
         db.add(Permission(user_id=user2.id))
 
-        # ============ 管理单元 ============
+        # ============ 分类（基础） ============
         categories_data = [
             {"name": "操作系统", "description": "Windows/Mac/Linux系统相关问题", "sla_hours": 3},
             {"name": "邮件系统", "description": "Outlook/邮件相关问题", "sla_hours": 2},
@@ -92,7 +89,6 @@ async def seed():
             {"name": "硬件故障", "description": "电脑、打印机、显示器等硬件", "sla_hours": 8},
             {"name": "账号权限", "description": "账号注册、密码重置、权限申请", "sla_hours": 4},
             {"name": "软件安装", "description": "软件安装、更新、卸载", "sla_hours": 4},
-            {"name": "咨询", "description": "不属于IT问题的咨询", "sla_hours": 24},
         ]
 
         categories = []
@@ -117,16 +113,14 @@ async def seed():
             db.add(bm)
             business_modules.append(bm)
 
-        await db.flush()  # 获取业务模块ID
+        await db.flush()
 
-        # ============ 性质（全局，不绑定业务模块） ============
+        # ============ 性质（全局） ============
         for name in ["故障", "需求", "咨询", "变更", "投诉"]:
             db.add(Property(name=name, created_by=admin.id))
 
-        # ============ 症状/原因/解决方法（绑定业务模块） ============
-        # 按业务模块分配症状/原因/解决方法
+        # ============ 症状/原因/解决方法 ============
         bm_data = {
-            # 业务模块名称: {症状列表, 原因列表, 解决方法列表}
             "Windows系统": {
                 "symptoms": ["蓝屏", "死机", "卡顿", "无法开机"],
                 "causes": ["系统文件损坏", "驱动冲突", "内存不足", "配置错误"],
@@ -202,16 +196,70 @@ async def seed():
 
         await db.flush()
 
-        # ============ 示例工单 ============
-        sample_tickets = [
-            {"title": "电脑蓝屏无法开机", "desc": "今天早上开机后出现蓝屏错误代码0x0000007B", "cat": 0, "user": user1, "agent": agents[0], "status": TicketStatus.ACCEPTED},
-            {"title": "Outlook无法收发邮件", "desc": "从昨天开始Outlook就无法发送邮件，一直显示连接超时", "cat": 1, "user": user2, "agent": agents[1], "status": TicketStatus.PROCESSING},
-            {"title": "无法连接公司WiFi", "desc": "新员工入职第一天，无法连接公司WiFi", "cat": 2, "user": user1, "agent": None, "status": TicketStatus.PENDING},
-            {"title": "打印机无法打印", "desc": "3楼打印机显示离线状态，所有同事都无法打印", "cat": 3, "user": user2, "agent": agents[0], "status": TicketStatus.RESOLVED_PENDING_REVIEW},
-            {"title": "密码过期需要重置", "desc": "域账号密码过期，无法登录电脑", "cat": 4, "user": user1, "agent": agents[2], "status": TicketStatus.RESOLVED},
+        # ============ 历史工单（仅已解决） ============
+        now = datetime.now(timezone.utc)
+        tickets_data = [
+            {
+                "title": "电脑蓝屏无法开机",
+                "desc": "开机后出现蓝屏错误代码0x0000007B，已尝试重启但问题依旧。",
+                "cat": 0, "user": user1, "agent": agents[0],
+                "status": TicketStatus.RESOLVED,
+                "created": now - timedelta(days=3),
+                "rating": 5, "comment": "张三处理很快，重启后恢复正常",
+            },
+            {
+                "title": "Outlook无法收发邮件",
+                "desc": "Outlook无法发送邮件，一直显示连接超时。重启客户端和电脑都没用。",
+                "cat": 1, "user": user2, "agent": agents[1],
+                "status": TicketStatus.RESOLVED,
+                "created": now - timedelta(days=5),
+                "rating": 4, "comment": "解决了，但等了比较久",
+            },
+            {
+                "title": "无法连接公司WiFi",
+                "desc": "新员工入职第一天，无法连接公司WiFi，提示密码错误但密码是正确的。",
+                "cat": 2, "user": user1, "agent": agents[2],
+                "status": TicketStatus.RESOLVED,
+                "created": now - timedelta(days=7),
+                "rating": 5, "comment": "很快就连上了，谢谢",
+            },
+            {
+                "title": "打印机无法打印",
+                "desc": "3楼打印机显示离线状态，所有同事都无法打印。已检查电源和网络连接。",
+                "cat": 3, "user": user2, "agent": agents[0],
+                "status": TicketStatus.RESOLVED,
+                "created": now - timedelta(days=10),
+                "rating": 5, "comment": "打印机修好了，非常感谢",
+            },
+            {
+                "title": "密码过期需要重置",
+                "desc": "域账号密码过期，无法登录电脑。需要重置密码。",
+                "cat": 4, "user": user1, "agent": agents[2],
+                "status": TicketStatus.RESOLVED,
+                "created": now - timedelta(days=2),
+                "rating": 5, "comment": "重置很快，马上就能用了",
+            },
+            {
+                "title": "VPN连接失败",
+                "desc": "在家办公无法连接公司VPN，提示认证失败。",
+                "cat": 2, "user": user2, "agent": agents[3],
+                "status": TicketStatus.RESOLVED,
+                "created": now - timedelta(days=4),
+                "rating": 4, "comment": "重新配置后可以了",
+            },
+            {
+                "title": "软件安装请求",
+                "desc": "需要安装Adobe Photoshop用于设计工作。",
+                "cat": 5, "user": user1, "agent": agents[4],
+                "status": TicketStatus.RESOLVED,
+                "created": now - timedelta(days=6),
+                "rating": 5, "comment": "安装顺利，已正常使用",
+            },
         ]
 
-        for i, t in enumerate(sample_tickets):
+        for i, t in enumerate(tickets_data):
+            rating = t.get("rating", 5)
+            comment = t.get("comment", "")
             ticket = Ticket(
                 ticket_no=await generate_ticket_no(db),
                 title=t["title"],
@@ -222,35 +270,32 @@ async def seed():
                 creator_id=t["user"].id,
                 assignee_id=t["agent"].id if t["agent"] else None,
                 sla_hours=categories[t["cat"]].sla_hours,
-                sla_deadline=datetime.now(timezone.utc) + timedelta(hours=categories[t["cat"]].sla_hours),
+                sla_deadline=t["created"] + timedelta(hours=categories[t["cat"]].sla_hours),
                 sla_status=SLAStatus.GREEN,
-                accepted_at=datetime.now(timezone.utc) - timedelta(hours=1) if t["agent"] else None,
-                resolved_at=datetime.now(timezone.utc) - timedelta(minutes=30) if t["status"] in (TicketStatus.RESOLVED, TicketStatus.RESOLVED_PENDING_REVIEW) else None,
-                rating=5 if t["status"] == TicketStatus.RESOLVED else None,
-                rating_comment="非常满意" if t["status"] == TicketStatus.RESOLVED else None,
+                created_at=t["created"],
+                accepted_at=t["created"] + timedelta(minutes=10),
+                resolved_at=t["created"] + timedelta(hours=2),
+                rating=rating,
+                rating_attitude=rating,
+                rating_solution=rating,
+                rating_time=rating,
+                rating_overall=rating,
+                rating_comment=comment,
             )
             db.add(ticket)
             await db.flush()
 
             # 操作日志
-            db.add(TicketLog(ticket_id=ticket.id, operator_id=t["user"].id, action="created", content=f"工单已创建: {t['title']}"))
-            if t["agent"]:
-                db.add(TicketLog(ticket_id=ticket.id, operator_id=t["agent"].id, action="accepted", content=f"{t['agent'].name} 已接单"))
-            if t["status"] == TicketStatus.RESOLVED:
-                db.add(TicketLog(ticket_id=ticket.id, operator_id=t["agent"].id, action="status_change", old_value="processing", new_value="resolved", content="问题已解决"))
-                db.add(TicketLog(ticket_id=ticket.id, operator_id=t["user"].id, action="rated", new_value="5", content="非常满意"))
-
-        # 快捷回复模板
-        templates_data = [
-            {"title": "问候语", "content": "您好，我是IT客服{agent_name}，请问有什么可以帮您？", "category": "通用"},
-            {"title": "需要更多信息", "content": "为了更好地帮助您，请提供以下信息：\n1. 问题截图\n2. 错误提示信息\n3. 问题发生时间", "category": "通用"},
-            {"title": "远程协助", "content": "我将为您发起远程协助，请保持电脑联网状态。", "category": "技术支持"},
-            {"title": "问题已解决", "content": "您的问题已解决，请确认是否恢复正常。如有其他问题随时联系。", "category": "通用"},
-            {"title": "密码重置", "content": "您的密码已重置为：{temp_password}\n请登录后立即修改密码。", "category": "账号"},
-            {"title": "等待处理", "content": "您的问题正在处理中，预计{eta}内完成，请耐心等待。", "category": "通用"},
-        ]
-        for tpl in templates_data:
-            db.add(Template(title=tpl["title"], content=tpl["content"], category=tpl["category"]))
+            db.add(TicketLog(ticket_id=ticket.id, operator_id=t["user"].id, action="created",
+                            content=f"工单已创建: {t['title']}", created_at=t["created"]))
+            db.add(TicketLog(ticket_id=ticket.id, operator_id=t["agent"].id, action="accepted",
+                            content=f"{t['agent'].name} 已接单", created_at=t["created"] + timedelta(minutes=10)))
+            db.add(TicketLog(ticket_id=ticket.id, operator_id=t["agent"].id, action="status_change",
+                            old_value="processing", new_value="resolved", content="问题已解决",
+                            created_at=t["created"] + timedelta(hours=2)))
+            db.add(TicketLog(ticket_id=ticket.id, operator_id=t["user"].id, action="rated",
+                            new_value=str(rating), content=comment,
+                            created_at=t["created"] + timedelta(hours=3)))
 
         await db.commit()
         print(f"[OK] Seed data created:")
@@ -258,8 +303,10 @@ async def seed():
         print(f"  Agents: {', '.join(agent_names)} (login_id U00001-U00005, password={DEFAULT_PASSWORD})")
         print(f"  Users: 刘一(U00006), 陈二(U00007) (password={DEFAULT_PASSWORD})")
         print(f"  Categories: {len(categories_data)}")
-        print(f"  Sample tickets: {len(sample_tickets)}")
-        print(f"  Templates: {len(templates_data)}")
+        print(f"  Business modules: {len(modules_data)}")
+        print(f"  Properties: 5 (故障/需求/咨询/变更/投诉)")
+        print(f"  Symptoms/Causes/Solutions: {sum(len(d['symptoms']) for d in bm_data.values())}/{sum(len(d['causes']) for d in bm_data.values())}/{sum(len(d['solutions']) for d in bm_data.values())}")
+        print(f"  Resolved tickets: {len(tickets_data)} (all with ratings)")
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@
           >
             <el-button :icon="Paperclip">附件</el-button>
           </el-upload>
-          <el-button type="primary" size="large" @click="sendMessage" :loading="sending" :disabled="(!userInput.trim() && !pendingFile) || streaming">
+          <el-button type="primary" size="large" @click="sendMessage" :loading="sending" :disabled="!userInput.trim() && !pendingFile">
             发送问题
           </el-button>
         </div>
@@ -71,35 +71,7 @@
                 </div>
               </div>
               <!-- 文本消息 -->
-              <div v-else-if="msg.type === 'text'" class="msg-text" style="white-space: pre-wrap;">{{ msg.text }}<span v-if="msg.streaming" class="streaming-cursor">|</span></div>
-              <!-- 思考过程 -->
-              <div v-if="msg.thinking" class="thinking-section">
-                <div class="thinking-header" @click="msg.thinkingExpanded = !msg.thinkingExpanded">
-                  <span class="thinking-icon">🧠</span>
-                  <span class="thinking-label">思考过程</span>
-                  <span v-if="msg.thinkingActive" class="thinking-active">思考中...</span>
-                  <span v-else class="thinking-toggle">{{ msg.thinkingExpanded ? '收起' : '展开' }}</span>
-                </div>
-                <div v-if="msg.thinkingExpanded || msg.thinkingActive" class="thinking-content">
-                  {{ msg.thinking }}
-                </div>
-              </div>
-              <!-- 来源引用卡片 -->
-              <div v-if="msg.sources && msg.sources.length > 0" class="sources-card">
-                <div class="sources-title">📎 参考来源</div>
-                <div v-for="(src, si) in msg.sources" :key="si" class="source-item">
-                  <el-tag size="small" :type="src.type === 'faq' ? 'success' : src.type === 'sop' ? 'warning' : 'info'" style="margin-right: 6px;">
-                    {{ src.type === 'faq' ? 'FAQ' : src.type === 'sop' ? 'SOP' : '历史工单' }}
-                  </el-tag>
-                  <span class="source-title">{{ src.title || src.question || '未知来源' }}</span>
-                </div>
-              </div>
-              <!-- 转人工按钮 -->
-              <div v-if="msg.showTransfer" class="transfer-area">
-                <el-button type="warning" size="small" @click="handleTransferToHuman(msg)">
-                  🙋 转人工客服
-                </el-button>
-              </div>
+              <div v-else-if="msg.type === 'text'" class="msg-text" style="white-space: pre-wrap;">{{ msg.text }}</div>
               <!-- 工单链接 -->
               <div v-if="msg.ticketId" class="ticket-link-area">
                 <el-button type="primary" @click="router.push('/chat-rooms')">
@@ -152,9 +124,9 @@
               v-model="userInput"
               placeholder="输入消息... (Ctrl+Enter发送)"
               @keyup.enter.ctrl="sendMessage"
-              :disabled="sending || streaming"
+              :disabled="sending"
             />
-            <el-button type="primary" @click="sendMessage" :loading="sending" :disabled="(!userInput.trim() && !pendingFile) || streaming">
+            <el-button type="primary" @click="sendMessage" :loading="sending" :disabled="!userInput.trim() && !pendingFile">
               发送
             </el-button>
           </div>
@@ -175,7 +147,7 @@
 import { ref, nextTick, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
-import { ticketApi, chatApi, uploadApi, categoryApi, aiApi } from '@/api'
+import { ticketApi, chatApi, uploadApi, categoryApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import { Paperclip, Document, Delete } from '@element-plus/icons-vue'
 
@@ -186,8 +158,6 @@ const sending = ref(false)
 const waitingReply = ref(false)
 const chatRef = ref(null)
 const pendingFile = ref(null)
-const streaming = ref(false)
-let streamAbortController = null
 
 // 消息持久化
 const STORAGE_KEY = 'home_chat_messages'
@@ -195,7 +165,7 @@ const ROOM_KEY = 'home_chat_room_id'
 const TICKET_KEY = 'home_chat_ticket_id'
 
 let parsedMessages = []
-try { parsedMessages = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch (e) { parsedMessages = [] }
+try { parsedMessages = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { parsedMessages = [] }
 const messages = ref(parsedMessages)
 const currentRoomId = ref(localStorage.getItem(ROOM_KEY) || null)
 const currentTicketId = ref(localStorage.getItem(TICKET_KEY) || null)
@@ -262,7 +232,7 @@ async function loadCategories() {
         desc: categoryDescs[c.name] || c.description || c.name,
       }))
     }
-  } catch (e) {
+  } catch {
     // 普通用户无 admin 权限，使用默认列表
   }
 }
@@ -407,138 +377,25 @@ async function sendMessage() {
   // 发送文本消息
   if (!text) return
 
-  // 检测转人工关键词 → 走原有工单流程
-  for (const keyword of transferKeywords) {
-    if (text.includes(keyword)) {
-      messages.value.push({ role: 'user', text, type: 'text' })
-      userInput.value = ''
-      scrollToBottom()
-      messages.value.push({ role: 'bot', text: '好的，我来帮您创建工单。请先选择问题类型：', type: 'category-select' })
-      scrollToBottom()
-      return
-    }
-  }
-
-  // 正常消息 → 调用 AI 智能客服
   messages.value.push({ role: 'user', text, type: 'text' })
   userInput.value = ''
   scrollToBottom()
 
-  // 构建对话历史（最近 5 轮，只取文本消息）
-  const history = []
-  const textMsgs = messages.value.filter(m => m.type === 'text' && (m.role === 'user' || m.role === 'bot'))
-  const recentMsgs = textMsgs.slice(-10) // 最近 5 轮 = 10 条消息
-  for (const m of recentMsgs) {
-    if (m.role === 'user') {
-      history.push({ role: 'user', content: m.text })
-    } else if (m.role === 'bot') {
-      // 去掉 <think>...</think> 标签，只保留回答内容
-      let content = m.text || ''
-      content = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
-      if (content) {
-        history.push({ role: 'assistant', content })
-      }
-    }
-  }
-
-  // 添加 AI 消息占位（流式追加）
-  const aiMsgIndex = messages.value.length
-  messages.value.push({
-    role: 'bot',
-    text: '',
-    type: 'text',
-    sources: null,
-    showTransfer: false,
-    streaming: true,
-    thinking: null,
-    thinkingActive: false,
-    thinkingExpanded: false,
-  })
-
-  sending.value = true
-  streaming.value = true
-  streamAbortController = new AbortController()
-
-  try {
-    const token = localStorage.getItem('token')
-    const response = await aiApi.chatStream({ question: text, history }, token, streamAbortController.signal)
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
-    }
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        try {
-          const payload = JSON.parse(line.slice(6))
-          if (payload.type === 'sources') {
-            messages.value[aiMsgIndex].sources = payload.sources || []
-          } else if (payload.type === 'thinking') {
-            if (!messages.value[aiMsgIndex].thinking) {
-              messages.value[aiMsgIndex].thinking = ''
-            }
-            messages.value[aiMsgIndex].thinking += payload.content || ''
-            messages.value[aiMsgIndex].thinkingActive = true
-            messages.value[aiMsgIndex].thinkingExpanded = true
-            scrollToBottom()
-          } else if (payload.type === 'token') {
-            messages.value[aiMsgIndex].thinkingActive = false
-            messages.value[aiMsgIndex].text += payload.content || ''
-            scrollToBottom()
-          } else if (payload.type === 'done') {
-            messages.value[aiMsgIndex].thinkingActive = false
-            if (messages.value[aiMsgIndex].thinking) {
-              messages.value[aiMsgIndex].thinkingExpanded = false
-            }
-            if (payload.has_relevant_docs === false) {
-              messages.value[aiMsgIndex].showTransfer = true
-            }
-            if (payload.sources && !messages.value[aiMsgIndex].sources) {
-              messages.value[aiMsgIndex].sources = payload.sources
-            }
-          } else if (payload.type === 'error') {
-            messages.value[aiMsgIndex].text = payload.content || payload.message || 'AI 服务暂时不可用'
-          }
-        } catch (e) { /* ignore parse error */ }
-      }
-    }
-
-    // 如果 AI 返回空内容，走 fallback
-    if (!messages.value[aiMsgIndex].text) {
-      messages.value[aiMsgIndex].text = getBotReply(text)
-    }
-  } catch (e) {
-    if (e.name === 'AbortError') {
-      messages.value[aiMsgIndex].text += '\n\n[已停止生成]'
+  // 机器人回复
+  const reply = getBotReply(text)
+  waitingReply.value = true
+  scrollToBottom()
+  setTimeout(() => {
+    if (typeof reply === 'object' && reply.type === 'category-select') {
+      // 分类选择消息
+      messages.value.push({ role: 'bot', text: reply.text, type: 'category-select' })
     } else {
-      // AI 接口不可用，fallback 到本地回复
-      const reply = getBotReply(text)
-      if (typeof reply === 'object' && reply.type === 'category-select') {
-        messages.value[aiMsgIndex].text = reply.text
-        messages.value[aiMsgIndex].type = 'category-select'
-      } else {
-        messages.value[aiMsgIndex].text = reply
-      }
+      // 普通文本回复
+      messages.value.push({ role: 'bot', text: reply, type: 'text' })
     }
-  } finally {
-    messages.value[aiMsgIndex].streaming = false
-    sending.value = false
-    streaming.value = false
-    streamAbortController = null
+    waitingReply.value = false
     scrollToBottom()
-  }
+  }, 800)
 }
 
 function quickAsk(catName) {
@@ -557,12 +414,6 @@ async function submitRating() {
     messages.value.push({ role: 'bot', text: '感谢您的评价！如有其他问题，随时联系我们。', type: 'text' })
     ElMessage.success('评价成功')
   } catch (e) { ElMessage.error('评价失败') }
-}
-
-function handleTransferToHuman(msg) {
-  msg.showTransfer = false
-  messages.value.push({ role: 'bot', text: '好的，我来帮您创建工单。请先选择问题类型：', type: 'category-select' })
-  scrollToBottom()
 }
 </script>
 
@@ -685,106 +536,4 @@ function handleTransferToHuman(msg) {
 
 /* 工单链接区域 */
 .ticket-link-area { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-
-/* 流式光标 */
-.streaming-cursor {
-  animation: blink 0.8s step-end infinite;
-  color: #2563eb;
-  font-weight: bold;
-}
-@keyframes blink {
-  50% { opacity: 0; }
-}
-
-/* 来源引用卡片 */
-.sources-card {
-  margin-top: 8px;
-  padding: 10px 14px;
-  background: #f0f7ff;
-  border: 1px solid #d6e8fa;
-  border-radius: 10px;
-  font-size: 13px;
-}
-.sources-title {
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 6px;
-  font-size: 13px;
-}
-.source-item {
-  display: flex;
-  align-items: center;
-  padding: 3px 0;
-  color: #555;
-}
-.source-title {
-  font-size: 13px;
-  color: #555;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 转人工按钮区域 */
-.transfer-area {
-  margin-top: 10px;
-}
-
-/* 思考过程 */
-.thinking-section {
-  margin-top: 8px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  overflow: hidden;
-}
-.thinking-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: #f8f9fa;
-  cursor: pointer;
-  font-size: 13px;
-  color: #666;
-  user-select: none;
-}
-.thinking-header:hover {
-  background: #eef0f2;
-}
-.thinking-icon {
-  font-size: 14px;
-}
-.thinking-label {
-  font-weight: 500;
-}
-.thinking-active {
-  color: #409eff;
-  font-size: 12px;
-  animation: thinking-pulse 1.5s ease-in-out infinite;
-}
-@keyframes thinking-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-.thinking-toggle {
-  margin-left: auto;
-  font-size: 12px;
-  color: #999;
-}
-.thinking-content {
-  padding: 10px 12px;
-  font-size: 12px;
-  color: #666;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  background: #fafbfc;
-  border-top: 1px solid #e0e0e0;
-  line-height: 1.6;
-  color: #888;
-  background: #fafafa;
-  border-top: 1px solid #e0e0e0;
-  white-space: pre-wrap;
-  max-height: 300px;
-  overflow-y: auto;
-}
 </style>

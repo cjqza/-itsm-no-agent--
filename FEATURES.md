@@ -14,25 +14,7 @@
 - [x] 对话消息持久化（localStorage），刷新不丢失
 - [x] 重置对话按钮
 
-### 1.2 AI 智能客服
-- [x] 首页 AI 聊天入口（与原有机器人并存）
-- [x] SSE 流式输出（逐字显示 AI 回复）
-- [x] RAG 检索增强生成（基于已解决工单 + FAQ 文档知识库）
-- [x] 来源引用卡片（展示 AI 回答的参考来源）
-- [x] 转人工按钮（AI 无法解答时无缝切换人工客服）
-- [x] 原有关键词机器人作为 fallback（AI 不可用时自动降级）
-- [x] Embedding 抽象层（支持 BGE 本地模型 / OpenAI API）
-- [x] LLM 抽象层（支持 GGUF 本地模型 / DeepSeek API）
-- [x] ChromaDB 向量存储
-- [x] 知识库同步（已解决工单 + FAQ 文档自动入库）
-- [x] 知识库状态查询
-- [x] AI 专用限流（20 次/分钟/IP）
-- [x] 重型依赖惰性导入（不安装 AI 包不影响现有功能）
-- [x] RAG pipeline 初始化失败优雅降级（API 返回 503）
-- [x] AI 思考过程显示（`<think>` 标签解析，可折叠区域，脉冲动画，流式自动展开/完成自动收起）
-- [x] SSE 流式事件统一（sources/thinking/token/done/error 五种事件类型）
-
-### 1.3 文件上传与消息
+### 1.2 文件上传与消息
 - [x] 发送图片消息（jpg/png/gif/webp/bmp）
 - [x] 发送文件消息（pdf/doc/xls/ppt/txt/csv/zip/rar）
 - [x] 图片消息内联预览，支持放大查看
@@ -40,14 +22,14 @@
 - [x] 待发送文件预览，可取消
 - [x] 文件大小限制 10MB
 
-### 1.4 我的工单
+### 1.3 我的工单
 - [x] 骨架屏加载态
 - [x] 工单列表（分页、状态筛选）
 - [x] 已评价工单详情对话框（工单号、创建时间、处理人、四维评分、反馈留言）
 - [x] 操作按钮按状态智能分发（待评价→评价页，已评价→详情弹窗，其他→聊天室）
 - [x] 行点击按状态智能分发（与按钮逻辑一致）
 
-### 1.5 聊天室（/chat-rooms）
+### 1.4 聊天室（/chat-rooms）
 - [x] 左侧聊天室列表（含工单号、标题、最后消息、未读数）
 - [x] 右侧聊天区域，支持文本/图片/文件消息
 - [x] WebSocket 实时通信
@@ -60,14 +42,14 @@
 - [x] 已评价工单只读展示评价结果
 - [x] 通过 query 参数 ticket_id 自动选中对应房间
 
-### 1.6 工单聊天（/chat/:ticketId）
+### 1.5 工单聊天（/chat/:ticketId）
 - [x] 实时 WebSocket 聊天
 - [x] 历史消息加载
 - [x] 图片/文件消息展示
 - [x] 待接单工单可取消
 - [x] 已接单/处理中工单可催单
 
-### 1.7 登录
+### 1.6 登录
 - [x] 账号密码登录（login_id 或手机号 + 密码）
 - [x] 账号注册即登录（自动分配 login_id，无需审批）
 - [x] 图形验证码（密码错误 3 次后触发）
@@ -203,7 +185,7 @@
 
 ---
 
-## 五、后端 API（75 个端点）
+## 五、后端 API（72 个端点）
 
 ### 5.1 认证（auth.py + captcha.py — 5 个）
 | 方法 | 路径 | 说明 |
@@ -309,13 +291,6 @@
 |------|------|------|
 | WS | /ws | 全局通知 WebSocket（JWT 认证，工单创建/状态变更广播） |
 
-### 5.9 AI 智能客服（ai_chat.py — 3 个）
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | /api/ai/chat | AI 聊天（支持 SSE 流式输出，RAG 检索增强生成） |
-| POST | /api/ai/knowledge/sync | 知识库同步（已解决工单 + FAQ 文档入库，需 admin_access） |
-| GET | /api/ai/knowledge/status | 知识库状态查询（需 admin_access） |
-
 ---
 
 ## 六、通用功能
@@ -363,25 +338,8 @@
 - [x] shared/composables/useWebSocket.js（三端 WS 连接统一为 composable，含重连+心跳）
 - [x] shared/stores/user.js（四端 store 基础提取：token/user/permissions/login/logout/fetchMe）
 
-### 6.5 AI / RAG
-- [x] RAG 检索增强生成管道（检索 → 构建消息 → 生成）
-- [x] Embedding 抽象层（BGE 本地模型 / OpenAI API 可切换）
-- [x] LLM 抽象层（GGUF 本地模型 / DeepSeek API 可切换）
-- [x] ChromaDB 向量存储
-- [x] 知识库自动构建（已解决工单 + FAQ 文档同步）
-- [x] 提示词模板（系统角色、RAG 上下文、兜底提示）
-- [x] SSE 流式输出（Server-Sent Events）
-- [x] AI 限流（20 次/分钟/IP，独立分组）
-- [x] 重型依赖惰性导入（不安装 AI 包不影响现有功能）
-- [x] RAG pipeline 初始化失败优雅降级（返回 503）
-- [x] AI 思考过程提取（`_parse_thinking` 解析 `<think>` 标签，`_stream_with_thinking` 流式分离 thinking/answer）
-- [x] 所有 LLM 子类统一返回 `{answer, thinking}` 结构
-- [x] RAG query/stream_query 返回 thinking 字段
-- [x] SSE 五种事件类型：sources / thinking / token / done / error
-- [x] generate_next_login_id 性能优化（SELECT MAX 替代全表扫描）
-
-### 6.6 其他
-- [x] API 限流（登录 5/min，注册 3/hour，验证码 10/min，其他 120/min，AI 20/min/IP）
+### 6.5 其他
+- [x] API 限流（登录 5/min，注册 3/hour，验证码 10/min，其他 120/min）
 - [x] 文件上传（图片/文档/文本/压缩包，10MB，已移除 text/html/js/css 危险类型）
 - [x] 快捷回复模板（数据库持久化，支持 CRUD + 分类筛选 + 种子数据）
 - [x] 工单操作日志

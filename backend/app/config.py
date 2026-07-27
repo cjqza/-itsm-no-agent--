@@ -69,28 +69,6 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
 
-    # AI / RAG
-    AI_EMBEDDING_PROVIDER: str = "bge"  # bge 或 openai
-    AI_EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"
-    AI_EMBEDDING_API_KEY: str = ""
-    AI_EMBEDDING_BASE_URL: str = "https://api.openai.com/v1"
-    AI_EMBEDDING_DIMENSION: int = 512
-
-    AI_LLM_PROVIDER: str = "deepseek"  # deepseek 或 gguf
-    AI_LLM_MODEL_PATH: str = ""  # GGUF 模型路径
-    AI_LLM_API_KEY: str = ""
-    AI_LLM_BASE_URL: str = "https://api.deepseek.com"
-    AI_LLM_MODEL_NAME: str = "deepseek-chat"
-    AI_LLM_MAX_TOKENS: int = 1024
-    AI_LLM_TEMPERATURE: float = 0.7
-
-    AI_VECTORSTORE_PATH: str = "./chroma_db"
-    AI_RAG_TOP_K: int = 5
-    AI_RAG_SCORE_THRESHOLD: float = 0.5
-    AI_RAG_MAX_HISTORY_TURNS: int = 5
-
-    AI_RATE_LIMIT_PER_MINUTE: int = 20  # AI 聊天限流
-
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
