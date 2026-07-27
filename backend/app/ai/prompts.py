@@ -111,7 +111,9 @@ def format_history(messages: list[dict], max_turns: int = 5) -> list[dict]:
         content = msg.get("content", "")
         if not content:
             continue
-        # 只保留 user 和 assistant 角色
+        # 只保留 user 和 assistant 角色（bot 映射为 assistant）
+        if role == "bot":
+            role = "assistant"
         if role in ("user", "assistant"):
             formatted.append({"role": role, "content": content})
 

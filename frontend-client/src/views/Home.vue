@@ -424,15 +424,20 @@ async function sendMessage() {
   userInput.value = ''
   scrollToBottom()
 
-  // 构建对话历史（最近 5 轮）
+  // 构建对话历史（最近 5 轮，只取文本消息）
   const history = []
-  const recentMsgs = messages.value.slice(-11, -1) // 排除刚加的用户消息，取最近 5 轮
+  const textMsgs = messages.value.filter(m => m.type === 'text' && (m.role === 'user' || m.role === 'bot'))
+  const recentMsgs = textMsgs.slice(-10) // 最近 5 轮 = 10 条消息
   for (const m of recentMsgs) {
-    if (m.type !== 'text') continue
     if (m.role === 'user') {
       history.push({ role: 'user', content: m.text })
     } else if (m.role === 'bot') {
-      history.push({ role: 'assistant', content: m.text })
+      // 去掉 <think>...</think> 标签，只保留回答内容
+      let content = m.text || ''
+      content = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+      if (content) {
+        history.push({ role: 'assistant', content })
+      }
     }
   }
 
