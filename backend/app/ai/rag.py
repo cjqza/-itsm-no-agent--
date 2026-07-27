@@ -117,8 +117,10 @@ class RAGPipeline:
         # 构建消息
         messages = self._build_messages(question, docs, formatted_history)
 
-        # 生成
-        answer = await self._llm.generate(messages)
+        # 生成（返回 {"answer": str, "thinking": Optional[str]}）
+        result = await self._llm.generate(messages)
+        answer = result["answer"]
+        thinking = result.get("thinking")
 
         # 构建来源信息
         sources = []
@@ -131,6 +133,7 @@ class RAGPipeline:
 
         return {
             "answer": answer,
+            "thinking": thinking,
             "sources": sources,
             "has_relevant_docs": len(docs) > 0,
             "llm_provider": self._llm.provider_name,
@@ -170,23 +173,19 @@ class RAGPipeline:
                 "score": round(doc.get("score", 0), 3),
             })
 
-        # 先发送元数据事件
+        # 先发送来源事件
         meta_event = {
-            "type": "metadata",
+            "type": "sources",
             "sources": sources,
             "has_relevant_docs": len(docs) > 0,
             "llm_provider": self._llm.provider_name,
         }
         yield f"data: {json.dumps(meta_event, ensure_ascii=False)}\n\n"
 
-        # 流式生成
+        # 流式生成（llm.stream 现在 yield dict 事件）
         try:
-            async for token in self._llm.stream(messages):
-                token_event = {
-                    "type": "token",
-                    "content": token,
-                }
-                yield f"data: {json.dumps(token_event, ensure_ascii=False)}\n\n"
+            async for event in self._llm.stream(messages):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as e:
             logger.error(f"RAG 流式生成异常: {e}")
             error_event = {
@@ -196,7 +195,11 @@ class RAGPipeline:
             yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
 
         # 结束事件
-        yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+        done_event = {
+            "type": "done",
+            "has_relevant_docs": len(docs) > 0,
+        }
+        yield f"data: {json.dumps(done_event, ensure_ascii=False)}\n\n"
 
 
 def get_rag_pipeline() -> Optional[RAGPipeline]:

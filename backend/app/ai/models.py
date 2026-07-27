@@ -14,6 +14,7 @@ class AIChatRequest(BaseModel):
 class AIChatResponse(BaseModel):
     """AI 聊天响应"""
     answer: str = Field(..., description="AI 回答")
+    thinking: Optional[str] = Field(default=None, description="AI 思考过程")
     sources: list[dict] = Field(default_factory=list, description="参考来源")
     has_relevant_docs: bool = Field(default=False, description="是否有相关文档")
     llm_provider: str = Field(default="", description="使用的 LLM 提供商")

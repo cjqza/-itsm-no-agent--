@@ -72,6 +72,18 @@
               </div>
               <!-- 文本消息 -->
               <div v-else-if="msg.type === 'text'" class="msg-text" style="white-space: pre-wrap;">{{ msg.text }}<span v-if="msg.streaming" class="streaming-cursor">|</span></div>
+              <!-- 思考过程 -->
+              <div v-if="msg.thinking" class="thinking-section">
+                <div class="thinking-header" @click="msg.thinkingExpanded = !msg.thinkingExpanded">
+                  <span class="thinking-icon">🧠</span>
+                  <span class="thinking-label">思考过程</span>
+                  <span v-if="msg.thinkingActive" class="thinking-active">思考中...</span>
+                  <span v-else class="thinking-toggle">{{ msg.thinkingExpanded ? '收起' : '展开' }}</span>
+                </div>
+                <div v-if="msg.thinkingExpanded || msg.thinkingActive" class="thinking-content">
+                  {{ msg.thinking }}
+                </div>
+              </div>
               <!-- 来源引用卡片 -->
               <div v-if="msg.sources && msg.sources.length > 0" class="sources-card">
                 <div class="sources-title">📎 参考来源</div>
@@ -433,6 +445,9 @@ async function sendMessage() {
     sources: null,
     showTransfer: false,
     streaming: true,
+    thinking: null,
+    thinkingActive: false,
+    thinkingExpanded: false,
   })
 
   sending.value = true
@@ -465,18 +480,31 @@ async function sendMessage() {
           const payload = JSON.parse(line.slice(6))
           if (payload.type === 'sources') {
             messages.value[aiMsgIndex].sources = payload.sources || []
+          } else if (payload.type === 'thinking') {
+            if (!messages.value[aiMsgIndex].thinking) {
+              messages.value[aiMsgIndex].thinking = ''
+            }
+            messages.value[aiMsgIndex].thinking += payload.content || ''
+            messages.value[aiMsgIndex].thinkingActive = true
+            messages.value[aiMsgIndex].thinkingExpanded = true
+            scrollToBottom()
           } else if (payload.type === 'token') {
-            messages.value[aiMsgIndex].text += payload.token || ''
+            messages.value[aiMsgIndex].thinkingActive = false
+            messages.value[aiMsgIndex].text += payload.content || ''
             scrollToBottom()
           } else if (payload.type === 'done') {
+            messages.value[aiMsgIndex].thinkingActive = false
+            if (messages.value[aiMsgIndex].thinking) {
+              messages.value[aiMsgIndex].thinkingExpanded = false
+            }
             if (payload.has_relevant_docs === false) {
               messages.value[aiMsgIndex].showTransfer = true
             }
-            if (payload.sources && !messages.value[aiMsgIndex].sources.length) {
+            if (payload.sources && !messages.value[aiMsgIndex].sources) {
               messages.value[aiMsgIndex].sources = payload.sources
             }
           } else if (payload.type === 'error') {
-            messages.value[aiMsgIndex].text = payload.message || 'AI 服务暂时不可用'
+            messages.value[aiMsgIndex].text = payload.content || payload.message || 'AI 服务暂时不可用'
           }
         } catch (e) { /* ignore parse error */ }
       }
@@ -695,5 +723,58 @@ function handleTransferToHuman(msg) {
 /* 转人工按钮区域 */
 .transfer-area {
   margin-top: 10px;
+}
+
+/* 思考过程 */
+.thinking-section {
+  margin-top: 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.thinking-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  cursor: pointer;
+  font-size: 13px;
+  color: #666;
+  user-select: none;
+}
+.thinking-header:hover {
+  background: #eef0f2;
+}
+.thinking-icon {
+  font-size: 14px;
+}
+.thinking-label {
+  font-weight: 500;
+}
+.thinking-active {
+  color: #409eff;
+  font-size: 12px;
+  animation: thinking-pulse 1.5s ease-in-out infinite;
+}
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.thinking-toggle {
+  margin-left: auto;
+  font-size: 12px;
+  color: #999;
+}
+.thinking-content {
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #888;
+  background: #fafafa;
+  border-top: 1px solid #e0e0e0;
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow-y: auto;
 }
 </style>

@@ -13,17 +13,124 @@ from typing import AsyncGenerator
 logger = logging.getLogger(__name__)
 
 
+# ────────────────── <think> 标签解析工具 ──────────────────
+
+def _parse_thinking(text: str) -> dict:
+    """从 LLM 输出中解析 <think>...</think> 思考过程。
+
+    Qwen2.5 模型将思考过程以 <think> 标签嵌入普通文本输出（非特殊 token）。
+    返回 {"answer": str, "thinking": Optional[str]}。
+    """
+    think_start = text.find("<think>")
+    think_end = text.find("</think>")
+    if think_start != -1 and think_end != -1 and think_end > think_start:
+        thinking_content = text[think_start + 7:think_end].strip()
+        answer_content = text[think_end + 8:].strip()
+        return {"thinking": thinking_content, "answer": answer_content}
+    # 没有思考标签，直接返回全文作为 answer
+    return {"thinking": None, "answer": text.strip()}
+
+
+async def _stream_with_thinking(raw_stream) -> AsyncGenerator[dict, None]:
+    """将原始 token 流包装为带 thinking/answer 分离的事件流。
+
+    逐 token 缓冲，检测跨 token 边界的 <think> / </think> 标签。
+    yield {"type": "thinking", "content": "..."} 或 {"type": "token", "content": "..."}。
+    """
+    THINK_OPEN = "<think>"
+    THINK_CLOSE = "</think>"
+    OPEN_LEN = len(THINK_OPEN)   # 7
+    CLOSE_LEN = len(THINK_CLOSE) # 8
+
+    in_thinking = False
+    past_thinking = False  # </think> 已经被消费，之后全部是 answer
+    buffer = ""
+
+    async for token in raw_stream:
+        buffer += token
+
+        if past_thinking:
+            # 已过思考阶段，直接输出
+            if buffer:
+                yield {"type": "token", "content": buffer}
+                buffer = ""
+            continue
+
+        if not in_thinking:
+            # 在 answer 模式中寻找 <think>
+            idx = buffer.find(THINK_OPEN)
+            if idx != -1:
+                # <think> 之前的部分是 answer
+                before = buffer[:idx]
+                if before:
+                    yield {"type": "token", "content": before}
+                buffer = buffer[idx + OPEN_LEN:]
+                in_thinking = True
+            else:
+                # 保留末尾 OPEN_LEN-1 个字符作为潜在部分标签
+                safe_len = len(buffer) - (OPEN_LEN - 1)
+                if safe_len > 0:
+                    yield {"type": "token", "content": buffer[:safe_len]}
+                    buffer = buffer[safe_len:]
+            # 如果进入 thinking 模式，继续处理 buffer
+            if in_thinking:
+                # 在 thinking 模式中寻找 </think>
+                close_idx = buffer.find(THINK_CLOSE)
+                if close_idx != -1:
+                    thinking_part = buffer[:close_idx]
+                    if thinking_part:
+                        yield {"type": "thinking", "content": thinking_part}
+                    buffer = buffer[close_idx + CLOSE_LEN:]
+                    in_thinking = False
+                    past_thinking = True
+                    # buffer 中剩余部分是 answer
+                    if buffer:
+                        yield {"type": "token", "content": buffer}
+                        buffer = ""
+                else:
+                    # 保留末尾 CLOSE_LEN-1 个字符
+                    safe_len = len(buffer) - (CLOSE_LEN - 1)
+                    if safe_len > 0:
+                        yield {"type": "thinking", "content": buffer[:safe_len]}
+                        buffer = buffer[safe_len:]
+        else:
+            # in_thinking == True，寻找 </think>
+            close_idx = buffer.find(THINK_CLOSE)
+            if close_idx != -1:
+                thinking_part = buffer[:close_idx]
+                if thinking_part:
+                    yield {"type": "thinking", "content": thinking_part}
+                buffer = buffer[close_idx + CLOSE_LEN:]
+                in_thinking = False
+                past_thinking = True
+                if buffer:
+                    yield {"type": "token", "content": buffer}
+                    buffer = ""
+            else:
+                safe_len = len(buffer) - (CLOSE_LEN - 1)
+                if safe_len > 0:
+                    yield {"type": "thinking", "content": buffer[:safe_len]}
+                    buffer = buffer[safe_len:]
+
+    # 流结束，flush 剩余 buffer
+    if buffer:
+        if in_thinking:
+            yield {"type": "thinking", "content": buffer}
+        else:
+            yield {"type": "token", "content": buffer}
+
+
 class BaseLLM(ABC):
     """LLM 抽象基类"""
 
     @abstractmethod
-    async def generate(self, messages: list[dict]) -> str:
-        """同步生成回答"""
+    async def generate(self, messages: list[dict]) -> dict:
+        """生成回答，返回 {"answer": str, "thinking": Optional[str]}"""
         ...
 
     @abstractmethod
-    async def stream(self, messages: list[dict]) -> AsyncGenerator[str, None]:
-        """流式生成回答，逐 token yield"""
+    async def stream(self, messages: list[dict]) -> AsyncGenerator[dict, None]:
+        """流式生成回答，逐事件 yield {"type": "thinking"|"token", "content": str}"""
         ...
 
     @property
@@ -80,21 +187,22 @@ class GGUFLLM(BaseLLM):
         parts.append("<|assistant|>")
         return "\n".join(parts)
 
-    def _generate_sync(self, messages: list[dict]) -> str:
-        """同步生成"""
+    def _generate_sync(self, messages: list[dict]) -> dict:
+        """同步生成，返回 {"answer": str, "thinking": Optional[str]}"""
         self._load_model()
         prompt = self._messages_to_prompt(messages)
-        return self._llm(prompt)
+        raw = self._llm(prompt)
+        return _parse_thinking(raw)
 
-    async def generate(self, messages: list[dict]) -> str:
-        """异步生成回答"""
+    async def generate(self, messages: list[dict]) -> dict:
+        """异步生成回答，返回 {"answer": str, "thinking": Optional[str]}"""
         return await asyncio.to_thread(self._generate_sync, messages)
 
-    async def stream(self, messages: list[dict]) -> AsyncGenerator[str, None]:
+    async def stream(self, messages: list[dict]) -> AsyncGenerator[dict, None]:
         """流式生成回答
 
         ctransformers 的 __call__ 支持 stream=True 返回同步迭代器，
-        使用队列桥接同步流和异步生成器。
+        使用队列桥接同步流和异步生成器，再用 _stream_with_thinking 分离思考过程。
         """
         self._load_model()
         prompt = self._messages_to_prompt(messages)
@@ -119,12 +227,17 @@ class GGUFLLM(BaseLLM):
         # 在线程中启动同步流
         loop.run_in_executor(None, _stream_sync)
 
-        # 从队列中读取数据
-        while True:
-            item = await queue.get()
-            if item is sentinel:
-                break
-            yield item
+        # 原始 token 异步生成器
+        async def _raw_tokens():
+            while True:
+                item = await queue.get()
+                if item is sentinel:
+                    break
+                yield item
+
+        # 用 _stream_with_thinking 包装，分离 thinking / answer
+        async for event in _stream_with_thinking(_raw_tokens()):
+            yield event
 
     @property
     def provider_name(self) -> str:
@@ -186,8 +299,8 @@ class TransformersLLM(BaseLLM):
         parts.append("<|assistant|>")
         return "\n".join(parts)
 
-    def _generate_sync(self, messages: list[dict]) -> str:
-        """同步生成"""
+    def _generate_sync(self, messages: list[dict]) -> dict:
+        """同步生成，返回 {"answer": str, "thinking": Optional[str]}"""
         self._load_model()
         import torch
         prompt = self._messages_to_prompt(messages)
@@ -200,21 +313,25 @@ class TransformersLLM(BaseLLM):
                 do_sample=True,
                 pad_token_id=self._tokenizer.eos_token_id,
             )
-        # 只取新生成的 token
+        # 只取新生成的 token；skip_special_tokens=False 保留 <think> 标签
         new_tokens = outputs[0][inputs["input_ids"].shape[1]:]
-        return self._tokenizer.decode(new_tokens, skip_special_tokens=True)
+        raw_text = self._tokenizer.decode(new_tokens, skip_special_tokens=False)
+        return _parse_thinking(raw_text)
 
-    async def generate(self, messages: list[dict]) -> str:
-        """异步生成回答"""
+    async def generate(self, messages: list[dict]) -> dict:
+        """异步生成回答，返回 {"answer": str, "thinking": Optional[str]}"""
         return await asyncio.to_thread(self._generate_sync, messages)
 
-    async def stream(self, messages: list[dict]) -> AsyncGenerator[str, None]:
+    async def stream(self, messages: list[dict]) -> AsyncGenerator[dict, None]:
         """流式生成回答
 
-        transformers 没有原生流式 generate，用同步方式返回完整结果。
+        transformers 没有原生流式 generate，调用 generate() 获取完整结果后
+        按 thinking / answer 分别 yield 事件。
         """
         result = await self.generate(messages)
-        yield result
+        if result.get("thinking"):
+            yield {"type": "thinking", "content": result["thinking"]}
+        yield {"type": "token", "content": result["answer"]}
 
     @property
     def provider_name(self) -> str:
@@ -272,34 +389,40 @@ class DeepSeekLLM(BaseLLM):
                 resp.raise_for_status()
                 return resp.json()
 
-    async def generate(self, messages: list[dict]) -> str:
-        """同步生成回答"""
+    async def generate(self, messages: list[dict]) -> dict:
+        """同步生成回答，返回 {"answer": str, "thinking": Optional[str]}"""
         data = await self._call_api(messages, stream=False)
-        return data["choices"][0]["message"]["content"]
+        raw_content = data["choices"][0]["message"]["content"]
+        return _parse_thinking(raw_content)
 
-    async def stream(self, messages: list[dict]) -> AsyncGenerator[str, None]:
-        """流式生成回答（SSE 格式解析）"""
+    async def stream(self, messages: list[dict]) -> AsyncGenerator[dict, None]:
+        """流式生成回答（SSE 格式解析），用 _stream_with_thinking 分离思考过程"""
         resp, client = await self._call_api(messages, stream=True)
-        try:
-            async for line in resp.aiter_lines():
-                if not line:
-                    continue
-                if not line.startswith("data: "):
-                    continue
-                data_str = line[6:]
-                if data_str.strip() == "[DONE]":
-                    break
-                try:
-                    data = json.loads(data_str)
-                    delta = data["choices"][0].get("delta", {})
-                    content = delta.get("content", "")
-                    if content:
-                        yield content
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    continue
-        finally:
-            await resp.aclose()
-            await client.aclose()
+
+        async def _raw_tokens():
+            try:
+                async for line in resp.aiter_lines():
+                    if not line:
+                        continue
+                    if not line.startswith("data: "):
+                        continue
+                    data_str = line[6:]
+                    if data_str.strip() == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(data_str)
+                        delta = data["choices"][0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            yield content
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue
+            finally:
+                await resp.aclose()
+                await client.aclose()
+
+        async for event in _stream_with_thinking(_raw_tokens()):
+            yield event
 
     @property
     def provider_name(self) -> str:

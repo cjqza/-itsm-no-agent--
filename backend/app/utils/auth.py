@@ -77,13 +77,15 @@ async def get_current_user(
 
 async def generate_next_login_id(db: "AsyncSession") -> str:
     """生成下一个专属ID号，格式 U%05d（U00001 起递增）"""
+    from sqlalchemy import func as sqlfunc
     result = await db.execute(
-        select(User.login_id).where(User.login_id.like("U%"))
+        select(sqlfunc.max(User.login_id)).where(User.login_id.like("U%"))
     )
-    max_seq = 0
-    for (lid,) in result.all():
-        if lid and lid.startswith("U") and lid[1:].isdigit():
-            max_seq = max(max_seq, int(lid[1:]))
+    max_id = result.scalar()
+    if max_id and max_id.startswith("U") and max_id[1:].isdigit():
+        max_seq = int(max_id[1:])
+    else:
+        max_seq = 0
     return f"U{max_seq + 1:05d}"
 
 
