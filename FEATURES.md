@@ -29,6 +29,8 @@
 - [x] AI 专用限流（20 次/分钟/IP）
 - [x] 重型依赖惰性导入（不安装 AI 包不影响现有功能）
 - [x] RAG pipeline 初始化失败优雅降级（API 返回 503）
+- [x] AI 思考过程显示（`<think>` 标签解析，可折叠区域，脉冲动画，流式自动展开/完成自动收起）
+- [x] SSE 流式事件统一（sources/thinking/token/done/error 五种事件类型）
 
 ### 1.3 文件上传与消息
 - [x] 发送图片消息（jpg/png/gif/webp/bmp）
@@ -372,6 +374,11 @@
 - [x] AI 限流（20 次/分钟/IP，独立分组）
 - [x] 重型依赖惰性导入（不安装 AI 包不影响现有功能）
 - [x] RAG pipeline 初始化失败优雅降级（返回 503）
+- [x] AI 思考过程提取（`_parse_thinking` 解析 `<think>` 标签，`_stream_with_thinking` 流式分离 thinking/answer）
+- [x] 所有 LLM 子类统一返回 `{answer, thinking}` 结构
+- [x] RAG query/stream_query 返回 thinking 字段
+- [x] SSE 五种事件类型：sources / thinking / token / done / error
+- [x] generate_next_login_id 性能优化（SELECT MAX 替代全表扫描）
 
 ### 6.6 其他
 - [x] API 限流（登录 5/min，注册 3/hour，验证码 10/min，其他 120/min，AI 20/min/IP）

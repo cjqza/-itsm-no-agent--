@@ -2,6 +2,13 @@
 
 > 本文件由 initializer（记录管家 agent）维护，记录项目的开发进展与变更。最新条目在最上方。
 
+## [2026-07-27] AI 思考过程显示 + Bug 修复 + 代码优化
+- **变更**：三类改动打包交付，5 个文件变更，+281 / -71。(1) AI 思考过程显示（Chain-of-Thought）：`llm.py` 新增 `_parse_thinking()` 解析 `<think>` 标签与 `_stream_with_thinking()` 流式分离思考/回答，所有 LLM 子类（GGUF/Transformers/DeepSeek）统一返回 `{answer, thinking}`；`rag.py` 的 `query()`/`stream_query()` 同步增加 `thinking` 字段；`models.py` 的 `AIChatResponse` 新增 `thinking: Optional[str]` 字段；前端 `Home.vue` 新增可折叠思考过程区域（脉冲动画、流式显示时自动展开，完成后自动收起）。(2) Bug 修复 4 项：SSE 流式 token 字段名不匹配（`payload.token` -> `payload.content`）；SSE 事件类型不匹配（`metadata` -> `sources`）；`done` 事件缺少 `has_relevant_docs` 导致转人工按钮不显示；`error` 事件字段名不匹配（统一用 `content`/`message` 兜底）。(3) 代码优化：`auth.py` 的 `generate_next_login_id` 改用 `SELECT MAX()` 替代全表扫描，提升 login_id 分配性能。73/73 测试全过。
+- **原因**：AI 回复缺少思考过程展示，用户无法了解 AI 推理逻辑，体验不透明；SSE 流式输出存在 4 处字段/事件名不匹配导致前端解析失败或功能缺失；login_id 分配全表扫描在数据量增长后存在性能隐患。
+- **影响**：`backend/app/ai/llm.py`（新增 `_parse_thinking` + `_stream_with_thinking`，所有 LLM 子类适配）；`backend/app/ai/rag.py`（query/stream_query 增加 thinking 字段，SSE 事件类型修复）；`backend/app/ai/models.py`（AIChatResponse 增加 thinking 字段）；`backend/app/utils/auth.py`（generate_next_login_id 性能优化）；`frontend-client/src/views/Home.vue`（思考过程 UI + SSE 字段修复 + 转人工按钮修复）。AI 模块 4 个文件改动 + 用户端首页 1 个文件改动，73/73 测试全过。
+- **提交**：`c282740`
+- **测试**：73/73 全部通过。
+
 ## [2026-07-26] AI 智能客服 RAG 系统：后端 RAG 管道 + 前端 AI 聊天 UI
 - **变更**：新增完整的 AI 智能客服系统，分两个提交交付。(1) 后端新建 `backend/app/ai/` 模块，包含 7 个文件：`embeddings.py`（Embedding 抽象层，支持 BGE 本地模型 + OpenAI API）、`vectorstore.py`（ChromaDB 向量存储管理）、`llm.py`（LLM 抽象层，支持 GGUF 本地模型 + DeepSeek API）、`rag.py`（RAG 管道：检索 → 构建消息 → 生成，全局单例惰性初始化）、`knowledge.py`（知识库构建器，已解决工单 + FAQ 文档同步）、`prompts.py`（提示词模板：系统角色、RAG 上下文、兜底提示）、`models.py`（Pydantic Schema）。(2) 新增 3 个 API 端点：`POST /api/ai/chat`（AI 聊天，支持 SSE 流式输出）、`POST /api/ai/knowledge/sync`（知识库同步，需 admin_access）、`GET /api/ai/knowledge/status`（知识库状态，需 admin_access）。(3) `config.py` 新增 17 项 AI/RAG 配置（LLM_PROVIDER、EMBEDDING_PROVIDER、CHROMA 路径、RERANKER 等）。(4) `main.py` 注册 ai_chat 路由 + AI 专用限流分组（20 次/分钟/IP）。(5) `requirements.txt` 新增 chromadb、sentence-transformers 依赖。(6) 前端 `frontend-client/src/api/index.js` 新增 aiApi（chat/chatStream/knowledgeStatus）。(7) `Home.vue` 接入 AI 聊天：SSE 流式输出、来源引用卡片、转人工按钮，保留原有 getBotReply() 作为 fallback。设计要点：所有重型依赖惰性导入，不安装 AI 包不影响现有功能；同步/异步边界用 `asyncio.to_thread()` 桥接；RAG pipeline 初始化失败返回 None，API 返回 503。共 14 个文件变更，+1588 / -19。
 - **原因**：用户提交工单前需要快速获得常见问题解答，人工客服响应有延迟；引入 RAG 检索增强生成系统，基于已解决工单和 FAQ 文档知识库，为用户提供即时 AI 问答，减轻人工客服压力，提升首次响应速度。
