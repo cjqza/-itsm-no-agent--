@@ -768,7 +768,12 @@ function handleTransferToHuman(msg) {
 }
 .thinking-content {
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  background: #fafbfc;
+  border-top: 1px solid #e0e0e0;
   line-height: 1.6;
   color: #888;
   background: #fafafa;
