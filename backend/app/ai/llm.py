@@ -323,15 +323,43 @@ class TransformersLLM(BaseLLM):
         return await asyncio.to_thread(self._generate_sync, messages)
 
     async def stream(self, messages: list[dict]) -> AsyncGenerator[dict, None]:
-        """流式生成回答
+        """流式生成回答（逐 token 输出，先 thinking 后 answer）
 
-        transformers 没有原生流式 generate，调用 generate() 获取完整结果后
-        按 thinking / answer 分别 yield 事件。
+        使用 transformers TextIteratorStreamer 实现逐 token 流式。
         """
-        result = await self.generate(messages)
-        if result.get("thinking"):
-            yield {"type": "thinking", "content": result["thinking"]}
-        yield {"type": "token", "content": result["answer"]}
+        self._load_model()
+        import torch
+        from transformers import TextIteratorStreamer
+        from threading import Thread
+
+        prompt = self._messages_to_prompt(messages)
+        inputs = self._tokenizer(prompt, return_tensors="pt").to(self._model.device)
+
+        streamer = TextIteratorStreamer(self._tokenizer, skip_prompt=True, skip_special_tokens=True)
+
+        def generate_in_thread():
+            with torch.no_grad():
+                self._model.generate(
+                    **inputs,
+                    max_new_tokens=self._max_tokens,
+                    temperature=self._temperature,
+                    do_sample=True,
+                    pad_token_id=self._tokenizer.eos_token_id,
+                    streamer=streamer,
+                )
+
+        thread = Thread(target=generate_in_thread)
+        thread.start()
+
+        # 用 _stream_with_thinking 包装 token 流，分离 thinking 和 answer
+        async def token_generator():
+            for text in streamer:
+                yield text
+
+        async for event in _stream_with_thinking(token_generator()):
+            yield event
+
+        thread.join(timeout=30)
 
     @property
     def provider_name(self) -> str:
